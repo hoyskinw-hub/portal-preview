@@ -641,3 +641,25 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .pol .pol-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .pol-top { flex-wrap: wrap; } .pol-tag { white-space: nowrap; }
 @media (max-width: 520px) { .pol .pol-cards { grid-template-columns: 1fr; } }
+
+/* 자료실 분류 트리: 상위 = 번호 배지 + 굵게, 하위 = 들여쓰기 안내선 */
+.tnum { display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 7px; font-size: 12.5px; font-weight: 800; color: #fff;
+  background: linear-gradient(160deg, var(--b1), var(--b2)); box-shadow: inset 0 -2px 0 rgba(0,0,0,.14), 0 1px 2px rgba(16,24,40,.12); font-variant-numeric: tabular-nums; }
+.tnum.big { width: 34px; height: 34px; border-radius: 10px; font-size: 17px; vertical-align: -6px; }
+.tnum.c0 { --b1: #4c7dff; --b2: #2a55d6; } .tnum.c1 { --b1: #26c281; --b2: #0f9a5e; } .tnum.c2 { --b1: #ff9a3d; --b2: #e36b0c; }
+.tnum.c3 { --b1: #a77bff; --b2: #7a4fe0; } .tnum.c4 { --b1: #ff6b7d; --b2: #e03a52; } .tnum.c5 { --b1: #2fc6d6; --b2: #1597a8; }
+.lib-tree .tnode.d0 + .tnode.d0 { border-top: 1px solid #eef1f5; margin-top: 4px; padding-top: 4px; }
+.trow.cat { gap: 8px; padding: 7px 8px; }
+.trow.cat .tw { order: 9; }
+.trow.cat.d0 { font-size: 15px; font-weight: 700; color: #15223b; padding: 9px 8px; }
+.trow.cat.d1, .trow.cat.d2 { font-size: 13.5px; font-weight: 600; color: #3a4556; }
+.trow.cat.d1::before, .trow.cat.d2::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 2px; background: #c5cdd9; }
+.tkids { margin: 0 0 6px 18px; padding-left: 8px; border-left: 2px solid #e7ebf1; }
+.trow.page { font-size: 13px; color: #5a6577; padding: 5px 8px; }
+.trow.page .tstar { color: #f0b400; margin-right: 4px; font-size: 11px; }
+.trow.on .tc { color: var(--brand); }
+.ccard.sub .cc-t { margin-top: 0; }
+.pcard { grid-template-columns: 1fr; }
+.h-cat .tnum { margin-right: 6px; width: 20px; height: 20px; font-size: 11.5px; }
+.lib-head h2 { display: flex; align-items: center; gap: 10px; }
+.lib-home { color: #5a6577; font-weight: 600; font-size: 13px; }

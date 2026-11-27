@@ -948,6 +948,8 @@ function catPath(cats, id) {
   while (c) { out.unshift(c); c = c.parent_id ? cats.find((x) => x.id === c.parent_id) : null; }
   return out;
 }
+const topNo = (cats, id) => { const root = catPath(cats, id)[0]; return root ? catChildren(cats, null).indexOf(root) + 1 : 0; };
+const numBadge = (n, big = false) => n ? `<span class="tnum c${(n - 1) % 6}${big ? ' big' : ''}">${n}</span>` : '';
 function catPageCount(cats, pages, id) {
   return pages.filter((p) => p.category_id === id).length + catChildren(cats, id).reduce((s, c) => s + catPageCount(cats, pages, c.id), 0);
 }
@@ -963,7 +965,7 @@ async function viewLibrary(main) {
     <aside class="lib-side card ${st.libPage || st.libCat || st.libQ ? 'collapsed' : ''}" id="lside">
       <button type="button" class="lib-toggle" id="ltog">📂 분류 보기</button>
       <form class="lib-search" id="ls"><input type="search" name="q" placeholder="자료실 검색" value="${esc(st.libQ)}"></form>
-      <div class="lib-home ${!st.libCat && !st.libPage && !st.libQ ? 'on' : ''}" id="lhome">🏠 자료실 홈</div>
+      <div class="lib-home ${!st.libCat && !st.libPage && !st.libQ ? 'on' : ''}" id="lhome">자료실 홈</div>
       <nav class="lib-tree">${treeHtml(lib, null, 0)}</nav>
       ${isSuper() ? '<button class="btn small block-sm" id="addCat">+ 분류 추가</button>' : ''}
     </aside>
@@ -992,19 +994,20 @@ function treeHtml(lib, pid, depth) {
     const open = libOpen.has(c.id);
     const kids = catChildren(lib.cats, c.id), pages = lib.pages.filter((p) => p.category_id === c.id).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
     const hasKids = kids.length || pages.length;
-    return `<div class="tnode">
-      <div class="trow ${st.libCat === c.id && !st.libPage ? 'on' : ''}" data-tcat="${c.id}" style="padding-left:${8 + depth * 14}px">
-        <span class="tw">${hasKids ? (open ? '▾' : '▸') : ''}</span><span class="ti">${esc(c.icon)}</span><span class="tn">${esc(c.name)}</span>
-        <span class="tc">${catPageCount(lib.cats, lib.pages, c.id) || ''}</span></div>
-      ${open ? treeHtml(lib, c.id, depth + 1) + pages.map((p) => `<div class="trow page ${st.libPage === p.id ? 'on' : ''}" data-tpage="${p.id}" style="padding-left:${26 + depth * 14}px">
-        <span class="ti">${esc(p.icon)}</span><span class="tn">${esc(p.title)}</span></div>`).join('') : ''}
+    const lead = depth === 0 ? numBadge(topNo(lib.cats, c.id)) : '';
+    return `<div class="tnode d${Math.min(depth, 2)}">
+      <div class="trow cat d${Math.min(depth, 2)} ${st.libCat === c.id && !st.libPage ? 'on' : ''}" data-tcat="${c.id}">
+        ${lead}<span class="tn">${esc(c.name)}</span>
+        <span class="tc">${catPageCount(lib.cats, lib.pages, c.id) || ''}</span><span class="tw">${hasKids ? (open ? '▾' : '▸') : ''}</span></div>
+      ${open && hasKids ? `<div class="tkids">${treeHtml(lib, c.id, depth + 1)}${pages.map((p) => `<div class="trow page ${st.libPage === p.id ? 'on' : ''}" data-tpage="${p.id}">
+        <span class="tn">${p.featured ? '<span class="tstar">★</span>' : ''}${esc(p.title)}</span></div>`).join('')}</div>` : ''}
     </div>`;
   }).join('');
 }
 
 function pageCards(pages, cats) {
   return `<div class="pcards">${pages.map((p) => `<div class="pcard" data-goto-page="${p.id}">
-    <div class="pc-i">${esc(p.icon)}</div><div class="pc-t">${p.featured ? '<span class="star">⭐</span>' : ''}${esc(p.title)}${p.created_at && daysAgo(p.created_at) < 7 ? ' <span class="new">NEW</span>' : p.updated_at && daysAgo(p.updated_at) < 7 ? ' <span class="new upd">UP</span>' : ''}</div>
+    <div class="pc-t">${p.featured ? '<span class="star">⭐</span>' : ''}${esc(p.title)}${p.created_at && daysAgo(p.created_at) < 7 ? ' <span class="new">NEW</span>' : p.updated_at && daysAgo(p.updated_at) < 7 ? ' <span class="new upd">UP</span>' : ''}</div>
     <div class="pc-m">${cats ? esc(catPath(cats, p.category_id).map((c) => c.name).join(' › ')) + ' · ' : ''}${fmt(p.updated_at).slice(0, 10)}</div></div>`).join('')}</div>`;
 }
 function bindPageCards(root) {
@@ -1017,7 +1020,7 @@ function libHomeView(el, lib) {
   const feat = lib.pages.filter((p) => p.featured);
   el.innerHTML = `<div class="lib-head"><h2>📚 자료실</h2><p class="muted">분류를 선택하거나 검색해서 자료를 찾으세요.</p></div>
     ${feat.length ? `<h3 class="section-title">⭐ 추천 자료</h3>${pageCards(feat, lib.cats)}<div style="height:18px"></div>` : ''}
-    <div class="ccards">${tops.map((c) => `<div class="ccard" data-goto-cat="${c.id}"><div class="cc-i">${esc(c.icon)}</div>
+    <div class="ccards">${tops.map((c, i) => `<div class="ccard" data-goto-cat="${c.id}"><div class="cc-i">${numBadge(i + 1, true)}</div>
       <div class="cc-t">${esc(c.name)}</div><div class="cc-m">자료 ${catPageCount(lib.cats, lib.pages, c.id)}개</div></div>`).join('')
       || '<div class="empty">아직 분류가 없습니다.</div>'}</div>
     ${recent.length ? `<h3 class="section-title">최근 업데이트</h3>${pageCards(recent, lib.cats)}` : ''}`;
@@ -1027,7 +1030,7 @@ function libHomeView(el, lib) {
 
 function crumbs(lib, catId, extra) {
   const path = catPath(lib.cats, catId);
-  return `<div class="crumbs"><a href="#" data-crumb="">자료실</a>${path.map((c) => ` › <a href="#" data-crumb="${c.id}">${esc(c.icon)} ${esc(c.name)}</a>`).join('')}${extra ? ` › <span>${extra}</span>` : ''}</div>`;
+  return `<div class="crumbs"><a href="#" data-crumb="">자료실</a>${path.map((c) => ` › <a href="#" data-crumb="${c.id}">${esc(c.name)}</a>`).join('')}${extra ? ` › <span>${extra}</span>` : ''}</div>`;
 }
 function bindCrumbs(el) {
   el.querySelectorAll('[data-crumb]').forEach((a) => a.onclick = (e) => {
@@ -1040,11 +1043,11 @@ function libCatView(el, lib) {
   if (!c) { st.libCat = null; return libHomeView(el, lib); }
   const kids = catChildren(lib.cats, c.id), pages = lib.pages.filter((p) => p.category_id === c.id).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
   el.innerHTML = `${crumbs(lib, c.parent_id)}
-    <div class="lib-head"><h2>${esc(c.icon)} ${esc(c.name)}</h2>
+    <div class="lib-head"><h2>${c.parent_id ? '' : numBadge(topNo(lib.cats, c.id), true)} ${esc(c.name)}</h2>
       ${isSuper() ? `<div class="lib-actions"><button class="btn small primary" id="addPage">+ 페이지</button>
         ${!c.parent_id ? '<button class="btn small" id="addSub">+ 하위 분류</button>' : ''}
         <button class="btn small" id="editCat">분류 편집</button><button class="btn small danger" id="delCat">분류 삭제</button></div>` : ''}</div>
-    ${kids.length ? `<div class="ccards">${kids.map((k) => `<div class="ccard" data-goto-cat="${k.id}"><div class="cc-i">${esc(k.icon)}</div>
+    ${kids.length ? `<div class="ccards">${kids.map((k) => `<div class="ccard sub" data-goto-cat="${k.id}">
       <div class="cc-t">${esc(k.name)}</div><div class="cc-m">자료 ${catPageCount(lib.cats, lib.pages, k.id)}개</div></div>`).join('')}</div>` : ''}
     ${pages.length ? pageCards(pages) : (kids.length ? '' : '<div class="card empty">이 분류에 아직 자료가 없습니다.</div>')}`;
   bindCrumbs(el); bindPageCards(el);
@@ -1072,7 +1075,7 @@ function catDialog(cat, parentId, lib) {
   const isEdit = !!cat;
   const parentOpts = lib && isEdit && !catChildren(lib.cats, cat.id).length
     ? `<label class="field"><span>상위 분류</span><select name="parent"><option value="">(최상위)</option>${catChildren(lib.cats, null).filter((c) => c.id !== cat.id)
-        .map((c) => `<option value="${c.id}" ${c.id === cat.parent_id ? 'selected' : ''}>${esc(c.icon)} ${esc(c.name)}</option>`).join('')}</select></label>` : '';
+        .map((c) => `<option value="${c.id}" ${c.id === cat.parent_id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : '';
   modal(isEdit ? '분류 편집' : (parentId ? '하위 분류 추가' : '분류 추가'), `
     <div class="row-icon"><label class="field"><span>아이콘</span><input type="text" name="icon" maxlength="4" value="${esc(cat?.icon || '📁')}"></label>
     <label class="field"><span>분류 이름</span><input type="text" name="name" required maxlength="60" value="${esc(cat?.name || '')}"></label></div>
@@ -1098,7 +1101,7 @@ async function libPageView(el, lib) {
   if (!p) { st.libPage = null; return libHomeView(el, lib); }
   el.innerHTML = `${crumbs(lib, p.category_id, esc(p.title))}
     <article class="card lib-page">
-      <div class="page-head"><div class="page-icon">${esc(p.icon)}</div>
+      <div class="page-head"><div></div>
         ${isSuper() ? '<div class="lib-actions"><button class="btn small" id="editP">편집</button><button class="btn small danger" id="delP">삭제</button></div>' : ''}</div>
       <h1 class="page-title">${esc(p.title)}</h1>
       <div class="meta">${esc(p.author_name || '')} · 최종 수정 ${fmt(p.updated_at)}</div>
@@ -1139,7 +1142,7 @@ async function viewLibEdit(main, lib) {
     const r = await sb.from('lib_pages').select('*').eq('id', st.libEdit.page).single(); if (r.error) throw r.error; p = r.data;
     files = (await sb.from('common_files').select('*').eq('page_id', p.id).order('id')).data || [];
   }
-  const catOpts = (pid, depth) => catChildren(lib.cats, pid).map((c) => `<option value="${c.id}" ${c.id === p.category_id ? 'selected' : ''}>${'　'.repeat(depth)}${esc(c.icon)} ${esc(c.name)}</option>${catOpts(c.id, depth + 1)}`).join('');
+  const catOpts = (pid, depth) => catChildren(lib.cats, pid).map((c) => `<option value="${c.id}" ${c.id === p.category_id ? 'selected' : ''}>${'　'.repeat(depth)}${esc(c.name)}</option>${catOpts(c.id, depth + 1)}`).join('');
   main.innerHTML = `<div class="bar"><button class="btn" id="back">← 취소</button><h2>${isNewP ? '새 페이지' : '페이지 편집'}</h2></div>
     <form class="card form-card wide" id="pf">
       <div class="row-icon"><label class="field"><span>아이콘</span><input type="text" name="icon" maxlength="4" value="${esc(p.icon)}"></label>
@@ -1356,7 +1359,7 @@ async function viewHome(main, { pendingCnt }) {
     </div>
 
     ${feat?.length ? `<section class="h-sec"><div class="h-box-head"><h3>⭐ 꼭 보세요</h3><button class="link" data-go="library">자료실 ›</button></div>
-      <div class="pcards">${feat.map((p) => `<div class="pcard feat" data-page="${p.id}"><div class="pc-i">${esc(p.icon)}</div>
+      <div class="pcards">${feat.map((p) => `<div class="pcard feat" data-page="${p.id}">
         <div class="pc-t">${esc(p.title)}</div><div class="pc-m">${esc(catName(p.category_id))}</div></div>`).join('')}</div></section>` : ''}
 
     ${topFaq?.length ? `<section class="h-sec"><div class="h-box-head"><h3>❓ 자주 묻는 질문</h3><button class="link" data-go="faq">FAQ 전체 ›</button></div>
@@ -1365,13 +1368,13 @@ async function viewHome(main, { pendingCnt }) {
     <section class="h-sec"><div class="h-box-head"><h3>🆕 새로 올라온 자료</h3><button class="link" data-go="library">자료실 ›</button></div>
       ${pages.data.length ? `<div class="pcards">${pages.data.map((p) => {
         const fresh = daysAgo(p.created_at) < 7, upd = !fresh && daysAgo(p.updated_at) < 7;
-        return `<div class="pcard" data-page="${p.id}"><div class="pc-i">${esc(p.icon)}</div>
+        return `<div class="pcard" data-page="${p.id}">
           <div class="pc-t">${esc(p.title)}${fresh ? ' <span class="new">NEW</span>' : upd ? ' <span class="new upd">UP</span>' : ''}</div>
           <div class="pc-m">${esc(catName(p.category_id))} · ${ago(p.updated_at)}</div></div>`; }).join('')}</div>`
         : '<div class="card h-empty">아직 등록된 자료가 없습니다.</div>'}</section>
 
     <section class="h-sec"><div class="h-box-head"><h3>📚 자료실 바로가기</h3></div>
-      <div class="h-cats">${tops.map((c) => `<button class="h-cat" data-cat="${c.id}"><span>${esc(c.icon)}</span>${esc(c.name)}</button>`).join('')}</div></section>`;
+      <div class="h-cats">${tops.map((c, i) => `<button class="h-cat" data-cat="${c.id}">${numBadge(i + 1)}${esc(c.name)}</button>`).join('')}</div></section>`;
 
   const go = (patch) => { resetView(); Object.assign(st, { q: '', filter: 'all', libCat: null, libPage: null, libQ: '' }, patch); window.scrollTo(0, 0); render(); };
   main.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => go({ tab: b.dataset.go }));
