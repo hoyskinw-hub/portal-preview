@@ -1584,7 +1584,7 @@ function mailItems(d = {}) {
   const corp = d.corp_type === '법인';
   const staff = staffList(d).length || 1;
   const L = [
-    ['g', '작성·날인 서류 (포털에서 출력)'],
+    ['g', '작성·날인 서류 (파트너센터에서 출력)'],
     ['apply', '대리점 개설 신청서', 1, '내용 확인 후 날인'],
     ['c_main', '대리점 계약서', corp ? 3 : 2, corp ? '계인·간인·직인, 연대보증인(대표자) 날인 / 본사 날인 후 대리점·연대보증인용 반송' : '계인·간인·직인 / 본사 날인 후 대리점용 반송'],
     ['c_fee', '가맹점관리수수료 및 DDC 지급수수료 관련 특약서', 2, '계인·간인·직인'],
@@ -1902,7 +1902,7 @@ function printMailList(info, app, received = null) {
     <table class="info"><tr><th>상호</th><td>${esc(info.agency || '')}</td><th>대표자</th><td>${esc(info.rep || '')}</td></tr>
       <tr><th>사업자번호</th><td>${esc(info.bizno || '')}</td><th>신청번호</th><td>${app.id} (${esc(info.corp_type || '')}사업자)</td></tr></table>
     <table class="l"><tr><th>No</th><th>서류</th><th>부수</th><th>비고</th><th>${received ? '수령' : '동봉'}</th></tr>${rows}</table>
-    <div class="to"><b>보내실 곳</b><br>${esc(MAIL_TO)}<br>※ 개인정보가 포함된 서류(신분증·등본·인감증명서 등)는 포털에 올리지 말고 이 목록과 함께 우편으로만 보내 주세요.<br>※ 계약서는 2부 모두 간인(페이지 사이)과 직인을 찍어 주세요. 본사 날인 후 1부를 돌려드립니다.</div>
+    <div class="to"><b>보내실 곳</b><br>${esc(MAIL_TO)}<br>※ 개인정보가 포함된 서류(신분증·등본·인감증명서 등)는 파트너센터에 올리지 말고 이 목록과 함께 우편으로만 보내 주세요.<br>※ 계약서는 보관용 부수 모두 첫 장 계인, 쪽 사이 간인, 서명란 날인을 해 주세요. 본사 날인 후 대리점(·연대보증인) 보관용을 돌려드립니다.</div>
     </body></html>`);
   w.document.close();
 }
@@ -2028,7 +2028,7 @@ async function viewOnboard(main) {
     draft: ['info', '① 기본 정보 입력 → ② 결격사유 확인 → ③ 서류 출력·날인 → ④ 사본 올리기 → ⑤ 원본 우편 발송 순서로 진행한 뒤 <b>제출</b>을 눌러 주세요. 입력한 내용은 자동으로 보관됩니다.'],
     revise: ['warn', `<b>본사에서 보완을 요청했습니다.</b>${app.hq_note ? `<div class="ob-note">${esc(app.hq_note)}</div>` : ''}표시된 서류를 고친 뒤 다시 제출해 주세요.`],
     submitted: ['ok', '제출이 완료됐습니다. <b>본사에서 서류와 우편 원본을 확인</b>하고 있습니다. 보완이 필요하면 이 화면에 안내됩니다.'],
-    approved: ['ok', '서류 검토가 끝났습니다. <b>대리점 코드 발급</b>을 기다리고 있습니다. 코드가 나오면 포털의 모든 메뉴를 이용할 수 있습니다.'],
+    approved: ['ok', '서류 검토가 끝났습니다. <b>대리점 코드 발급</b>을 기다리고 있습니다. 코드가 나오면 파트너센터의 모든 메뉴를 이용할 수 있습니다.'],
   }[app.status] || ['info', ''];
   const head = (x, ic, n) => `<div class="ob-doc-head"><span class="ob-num">${n}</span>
     <div class="ob-doc-t"><b>${esc(x.t.title)}</b> ${x.required ? '<span class="ob-req">필수</span>' : '<span class="ob-opt">선택</span>'}
@@ -2068,7 +2068,7 @@ async function viewOnboard(main) {
             ${info.doc_date ? '' : '<li>작성일을 비워 두어 날짜 칸이 빈칸입니다. 날인하는 날짜를 손으로 적어 주세요.</li>'}</ul>`
           : '<div class="muted">① 기본 정보를 먼저 저장하면 내려받을 수 있습니다.</div>'}</div></article>
       ${['biz_reg', 'bankbook', 'lease'].map((k, i) => S[k] && (k !== 'lease' || info.own === '임차' || S[k].files.length) ? art(S[k], `4-${i + 1}`, upBody(S[k])) : '').join('')}
-      <div class="ob-banner warn ob-sens">🔒 <b>신분증·주민등록등본·인감증명서·재산세 과세증명서·법인 서류</b>는 개인정보 보호를 위해 포털에 올리지 마세요. 아래 발송 목록에 따라 <b>우편으로만</b> 받습니다.</div>
+      <div class="ob-banner warn ob-sens">🔒 <b>신분증·주민등록등본·인감증명서·재산세 과세증명서·법인 서류</b>는 개인정보 보호를 위해 파트너센터에 올리지 마세요. 아래 발송 목록에 따라 <b>우편으로만</b> 받습니다.</div>
       ${art(S.mail, 5, `<div class="ob-mail">${items.filter((x) => !x.group).length}종 · <b>${esc(MAIL_TO)}</b></div>
         ${S.mail.doc?.data?.sent ? `<div class="ob-sum">${esc(S.mail.doc.data.date || '')} 발송${S.mail.doc.data.tracking ? ` · 등기번호 ${esc(S.mail.doc.data.tracking)}` : ''}</div>` : ''}
         <button class="btn small" data-mlist ${S.apply.doc ? '' : 'disabled'}>🖨 발송 목록 출력 (동봉용)</button>
@@ -2196,7 +2196,7 @@ async function viewOnboardDetail(main) {
       ${!info.corp_type ? '<div class="muted">기본 정보가 없어 목록을 만들 수 없습니다.</div>' : `<table class="tbl ob-rtbl">${mailItems(info).map((x) => x.group ? `<tr class="g"><td colspan="4">${esc(x.group)}</td></tr>`
         : `<tr><td class="c"><input type="checkbox" data-rcv="${x.k}" ${rec[x.k] ? 'checked' : ''} ${issued ? 'disabled' : ''}></td><td>${esc(x.t)}${x.s ? ' <span class="ob-s">개인정보</span>' : ''}</td><td class="c">${x.n}부</td>
           <td class="muted">${rec[x.k] ? `${esc(rec[x.k].at || '')} ${esc(rec[x.k].by || '')}` : esc(x.note)}</td></tr>`).join('')}</table>`}
-      <p class="hint">개인정보가 담긴 원본은 포털에 스캔해 올리지 말고 기존 문서 보관 절차대로 보관하세요.</p></section>`;
+      <p class="hint">개인정보가 담긴 원본은 파트너센터에 스캔해 올리지 말고 기존 문서 보관 절차대로 보관하세요.</p></section>`;
 
   main.querySelector('#back').onclick = () => { st.obId = null; render(); };
   bindDownloads(main);
@@ -2234,7 +2234,7 @@ async function viewOnboardDetail(main) {
     toast('검토 완료로 바꿨습니다.'); render();
   };
   const is = main.querySelector('#issue');
-  if (is) is.onclick = () => modal('대리점 코드 발급', `<p class="hint">발급하면 대리점이 등록되고, 이 계정은 <b>대표자</b> 권한으로 바뀌어 포털의 모든 메뉴를 쓸 수 있습니다.</p>
+  if (is) is.onclick = () => modal('대리점 코드 발급', `<p class="hint">발급하면 대리점이 등록되고, 이 계정은 <b>대표자</b> 권한으로 바뀌어 파트너센터의 모든 메뉴를 쓸 수 있습니다.</p>
     ${recN < items.length ? `<div class="ob-banner warn">원본 서류 ${items.length - recN}종을 아직 수령 체크하지 않았습니다.</div>` : ''}
     <div class="row2"><label class="field"><span>대리점 코드</span><input type="text" name="code" required inputmode="numeric"></label>
     <label class="field"><span>대리점명</span><input type="text" name="name" required value="${esc(app.company_name || '')}"></label></div>`,

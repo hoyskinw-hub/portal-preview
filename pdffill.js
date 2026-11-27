@@ -90,7 +90,7 @@ export async function buildPdf(lib, tplBytes, layout, fontBytes, data, title = '
       pg.drawText(text, { x, y: f.solo ? f.y - s * 0.36 : f.y, size: s, font, color: black });
     }
   }
-  out.setTitle(title); out.setProducer('대리점 소통 포털'); out.setCreator('KICC 채널영업2팀');
+  out.setTitle(title); out.setProducer('KICC 파트너센터'); out.setCreator('KICC 채널영업2팀');
   return out.save();
 }
 
