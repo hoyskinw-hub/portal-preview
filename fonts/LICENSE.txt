@@ -1,3 +1,2 @@
-kr.ttf: Noto Sans CJK KR (한글·기본 기호만 추린 TrueType 변환본)
-Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.
-Licensed under the SIL Open Font License, Version 1.1 — https://openfontlicense.org
+kr.ttf: 나눔고딕(NanumGothic) — 한글·기본 기호만 추린 부분 글꼴
+Copyright (c) 2010 NAVER Corporation. SIL Open Font License, Version 1.1 — https://openfontlicense.org
