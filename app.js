@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=c8ed8d4';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=a8cdbb4';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1768,7 +1768,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=c8ed8d4'), import('./docfill.js?v=c8ed8d4'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=a8cdbb4'), import('./docfill.js?v=a8cdbb4'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1914,7 +1914,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=c8ed8d4')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=a8cdbb4')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부의 첫 장에 걸쳐</span><span><b>간인</b> 쪽과 쪽 사이에 걸쳐</span></div>
@@ -2282,7 +2282,7 @@ async function viewOnboardDetail(main) {
   const body = (x) => {
     const k = x.t.key;
     if (k === 'apply') return x.doc ? `<details class="ob-det"><summary>입력 내용 보기 — ${esc(info.corp_type || '')}사업자 · 연대보증인 ${esc(info.g_name || '-')}</summary><table class="tbl ob-vals">${infoTable(info)}</table></details>
-      <button class="btn small primary" data-pdf="apply">⬇ 개설 신청서 PDF (결재용)</button> <button class="btn small" data-pdf="forms">계약서·신고서·서약서 PDF</button>` : '<div class="muted">아직 작성하지 않았습니다.</div>';
+      <button class="btn small primary" data-pdf="all">⬇ 개설 서류 전체 PDF (신청서·계약서·신고서·서약서)</button>` : '<div class="muted">아직 작성하지 않았습니다.</div>';
     if (k === 'notice') return nd ? `<ol class="ob-q small">${OB_NOTICE.map((q, i) => `<li class="${yes[i] ? 'bad' : ''}"><div>${esc(q)}</div><b>${esc(nd[`q${i + 1}`] || '-')}</b></li>`).join('')}</ol>` : '<div class="muted">아직 확인하지 않았습니다.</div>';
     if (k === 'mail') return x.doc?.data?.sent ? `<div class="ob-sum">${esc(x.doc.data.date || '')} 발송${x.doc.data.tracking ? ` · 등기번호 ${esc(x.doc.data.tracking)}` : ''}</div>` : '<div class="muted">아직 발송 표시가 없습니다.</div>';
     return x.files.length ? commonFilesHtml(x.files) : '<div class="muted">첨부 없음</div>';
@@ -2294,7 +2294,7 @@ async function viewOnboardDetail(main) {
         <button class="btn small primary" id="issue">🏷 코드 발급</button>` : ''}</div>
     <section class="ob-hero admin"><div><h2>${esc(app.company_name || '(상호 미입력)')}</h2>
       <p>대표 ${esc(app.ceo_name || '-')} · ${esc(app.phone || '-')} · ${esc(app.email || '-')}<br>${esc(app.address || '')}</p>
-      <p>신청번호 ${app.id} · <span class="ob-chip ${app.status}">${OB_LABEL[app.status]}</span>${app.issued_code ? ` · 발급 코드 <b>${esc(app.issued_code)}</b>` : ''} · 원본 수령 <b>${recN}/${items.length}</b></p></div>
+      <p>신청번호 ${app.id} · <span class="ob-chip ${app.status}">${OB_LABEL[app.status]}</span>${app.issued_code ? ` · 발급 코드 <b>${esc(app.issued_code)}</b>` : ''} · 원본 수령 <b data-recn="b">${recN}/${items.length}</b></p></div>
       ${stepper(app.status)}</section>
     ${yes.some(Boolean) ? `<div class="ob-banner warn">⚠ <b>결격사유 확인에서 "예"로 답한 문항이 ${yes.filter(Boolean).length}개 있습니다.</b> 가맹점모집인 등록 가능 여부를 먼저 확인하세요.</div>` : ''}
     ${app.hq_note ? `<div class="ob-banner warn"><b>대리점에 전달한 안내</b><div class="ob-note">${esc(app.hq_note)}</div></div>` : ''}
@@ -2309,7 +2309,7 @@ async function viewOnboardDetail(main) {
         </div></article>`).join('')}</div>
 
     <section class="card ob-recv"><div class="bar"><h3>원본 서류 수령 체크</h3><div class="grow"></div>
-      <span class="muted">${recN}/${items.length} 수령</span> <button class="btn small" data-mlistr>🖨 수령 현황 출력</button></div>
+      <span class="muted" data-recn>${recN}/${items.length} 수령</span> <button class="btn small" data-mlistr>🖨 수령 현황 출력</button></div>
       ${!info.corp_type ? '<div class="muted">기본 정보가 없어 목록을 만들 수 없습니다.</div>' : `<table class="tbl ob-rtbl">${mailItems(info).map((x) => x.group ? `<tr class="g"><td colspan="4">${esc(x.group)}</td></tr>`
         : `<tr><td class="c"><input type="checkbox" data-rcv="${x.k}" ${rec[x.k] ? 'checked' : ''} ${issued ? 'disabled' : ''}></td><td>${esc(x.t)}${x.s ? ' <span class="ob-s">개인정보</span>' : ''}</td><td class="c">${x.n}부</td>
           <td class="muted">${rec[x.k] ? `${esc(rec[x.k].at || '')} ${esc(rec[x.k].by || '')}` : esc(x.note)}</td></tr>`).join('')}</table>`}
@@ -2319,12 +2319,18 @@ async function viewOnboardDetail(main) {
   bindDownloads(main);
   bindMakeDocs(main, info, app);
   main.querySelectorAll('[data-mlistr]').forEach((b) => b.onclick = () => printMailList(info, app, rec));
+  const recNote = {}; mailItems(info).forEach((x) => { if (!x.group) recNote[x.k] = x.note || ''; });
   main.querySelectorAll('[data-rcv]').forEach((c) => c.onchange = async () => {
-    const r2 = { ...rec };
-    if (c.checked) r2[c.dataset.rcv] = { at: new Date().toISOString().slice(0, 10), by: me.contact_name || me.email || '' }; else delete r2[c.dataset.rcv];
+    const k = c.dataset.rcv, cell = c.closest('tr').lastElementChild, r2 = { ...rec };
+    if (c.checked) r2[k] = { at: new Date().toISOString().slice(0, 10), by: me.contact_name || me.email || '' }; else delete r2[k];
+    c.disabled = true;
     const { error: e } = await sb.from('onboard_apps').update({ received: r2 }).eq('id', app.id);
+    c.disabled = false;
     if (e) { c.checked = !c.checked; return fail(e); }
-    render();
+    if (c.checked) rec[k] = r2[k]; else delete rec[k];
+    cell.textContent = rec[k] ? `${rec[k].at} ${rec[k].by}` : recNote[k];
+    const n = items.filter((x) => rec[x.k]).length;
+    main.querySelectorAll('[data-recn]').forEach((el) => { el.textContent = el.dataset.recn === 'b' ? `${n}/${items.length}` : `${n}/${items.length} 수령`; });
   });
   const setDoc = async (key, patch) => {
     const ex = docs.find((d) => d.doc_key === key);
@@ -2340,9 +2346,28 @@ async function viewOnboardDetail(main) {
       async (v) => { await setDoc(key, { status: 'revise', revise_note: v.note.trim() }); toast('보완 요청을 표시했습니다. 위의 [보완 요청]으로 대리점에 돌려보내세요.'); render(); }, '저장');
   });
   const rv = main.querySelector('#revise');
-  if (rv) rv.onclick = () => modal('대리점에 보완 요청', `<p class="hint">대리점이 다시 서류를 고쳐 제출할 수 있게 됩니다. 서류별 보완 사유도 함께 표시됩니다.</p>
-    <label class="field"><span>전체 안내 <small>(선택)</small></span><textarea name="note" rows="3">${esc(app.hq_note || '')}</textarea></label>`,
-    async (v) => { const { error: e } = await sb.from('onboard_apps').update({ status: 'revise', hq_note: v.note.trim() }).eq('id', app.id); if (e) throw e; toast('보완 요청했습니다.'); render(); }, '보완 요청');
+  if (rv) rv.onclick = async () => {
+    const { data: acc } = await sb.from('profiles').select('email,contact_name').eq('id', app.user_id).maybeSingle();
+    const to = acc?.email || app.email || '';
+    modal('대리점에 보완 요청', `<p class="hint">대리점이 다시 서류를 고쳐 제출할 수 있게 됩니다. 서류별 보완 사유도 함께 표시됩니다.</p>
+    <label class="field"><span>전체 안내 <small>(선택)</small></span><textarea name="note" rows="3">${esc(app.hq_note || '')}</textarea></label>
+    ${to ? `<label class="ob-mailchk"><input type="checkbox" name="mail" checked> 가입 메일 <b>${esc(to)}</b>로 보완 요청 메일 보내기 <small class="muted">(메일 프로그램에 내용이 채워져 열립니다)</small></label>` : '<p class="hint">가입 메일 주소가 없어 메일은 보낼 수 없습니다.</p>'}`,
+    async (v, f) => {
+      const { error: e } = await sb.from('onboard_apps').update({ status: 'revise', hq_note: v.note.trim() }).eq('id', app.id); if (e) throw e;
+      if (to && f.querySelector('[name=mail]')?.checked) {
+        const fixes = states.filter((x) => x.hq === 'revise').map((x) => `- ${x.t.title}${x.doc?.revise_note ? `: ${x.doc.revise_note}` : ''}`);
+        const who = app.ceo_name || acc?.contact_name || '';
+        const bodyTxt = [`${app.company_name || ''} ${who ? `${who} 대표님` : ''}, 안녕하세요.`.trim(), '한국정보통신(KICC) 채널영업2팀입니다.', '',
+          '제출해 주신 대리점 개설 서류에 보완이 필요한 부분이 있어 안내드립니다.', '',
+          ...(fixes.length ? ['[보완할 서류]', ...fixes, ''] : []), ...(v.note.trim() ? ['[안내 사항]', v.note.trim(), ''] : []),
+          'KICC 파트너센터에 로그인하신 뒤 [개설 신청] 화면에서 수정해 다시 제출해 주세요.', location.origin + location.pathname, '',
+          '감사합니다.', `${me.contact_name || ''} 드림`.trim()].join('\n');
+        const subj = `[KICC 파트너센터] 대리점 개설 서류 보완 요청${app.company_name ? ` - ${app.company_name}` : ''}`;
+        location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(bodyTxt)}`;
+      }
+      toast('보완 요청했습니다.'); render();
+    }, '보완 요청');
+  };
   const ap = main.querySelector('#approve');
   if (ap) ap.onclick = async () => {
     const missing = states.filter((x) => x.required && x.hq !== 'ok');
@@ -2408,7 +2433,7 @@ async function cleanSeal(file) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=c8ed8d4');
+  const V = await import('./viewer.js?v=a8cdbb4');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
