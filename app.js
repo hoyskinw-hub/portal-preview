@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=a8cdbb4';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=fd7322e';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -265,9 +265,13 @@ async function render() {
     const { count } = await sb.from('contracts').select('id', { count: 'exact', head: true }).eq('status', isAdmin() ? 'agency_signed' : 'sent');
     ctCnt = count || 0;
   }
+  // 본사: 공통 메뉴 + [본사 관리] 묶음 (누르면 바로 아래에 하위 메뉴)
+  const HQ_TABS = [['inbox', '최근 문의', '💬'], ['board', '대리점별 게시판', '🗂'], ['files', '대리점 자료함', '📁'], ['onboarding', '개설 신청', '📝', obPending],
+    ['contracts', '전자계약', '✍️', ctCnt], ['users', '가입 승인', '🙋', pendingCnt], ['agencies', '대리점 관리', '🏢']].filter(([k]) => isSuper() || k !== 'agencies');
+  const inHq = isAdmin() && HQ_TABS.some(([k]) => k === st.tab);
+  const hqSum = HQ_TABS.reduce((a, t) => a + (t[3] || 0), 0);
   const tabs = isProspect() ? [['onboard', '대리점 개설 신청']] : isAdmin()
-    ? [['home', '홈'], ['notices', '공지사항'], ['library', '자료실'], ['faq', 'FAQ'], ['inbox', '최근 문의'], ['board', '대리점별 게시판'], ['files', '대리점 자료함'],
-       ['onboarding', '개설 신청', obPending], ['contracts', '전자계약', ctCnt], ['users', '가입 승인', pendingCnt], ['agencies', '대리점 관리']].filter(([k]) => isSuper() || k !== 'agencies')
+    ? [['home', '홈'], ['notices', '공지사항'], ['library', '자료실'], ['faq', 'FAQ']]
     : [['home', '홈'], ['notices', '공지사항', newNotice], ['library', '자료실'], ['faq', 'FAQ'], ['board', '1:1 문의'],
        ['contracts', '전자계약', ctCnt], ['myagency', '우리 대리점', memberPending]].filter(([k]) => isOwner() || !OWNER_ONLY.has(k));
   const ICON = { home: '🏠', notices: '📢', library: '📚', faq: '❓', board: '💬', myagency: '🏢', contracts: '✍️' };
@@ -279,7 +283,10 @@ async function render() {
       ${isProspect() ? '<div class="grow"></div>' : `<form class="gsearch" id="gs"><input type="search" name="q" placeholder="전체 검색 (공지·자료실·게시판)" value="${esc(st.tab === 'search' ? st.gq : '')}"></form>`}
       <div class="who"><span>${whoName}</span><button class="btn small" id="logout">로그아웃</button></div>
     </div>
-    <nav class="tabs">${tabs.map(([k, l, c]) => `<button class="tab ${st.tab === k ? 'on' : ''}" data-tab="${k}">${l}${c ? `<span class="cnt">${c}</span>` : ''}</button>`).join('')}</nav>
+    <nav class="tabs">${tabs.map(([k, l, c]) => `<button class="tab ${st.tab === k ? 'on' : ''}" data-tab="${k}">${l}${c ? `<span class="cnt">${c}</span>` : ''}</button>`).join('')}
+      ${isAdmin() ? `<button class="tab hq-btn ${inHq ? 'on' : ''}" id="hqBtn" aria-expanded="${inHq || st.hqOpen ? 'true' : 'false'}">🛠 본사 관리${hqSum ? `<span class="cnt">${hqSum}</span>` : ''}<span class="hq-caret">▾</span></button>` : ''}</nav>
+    ${isAdmin() ? `<nav class="hq-sub" id="hqSub" ${inHq || st.hqOpen ? '' : 'hidden'}><div class="hq-sub-in"><span class="hq-lab">본사 관리</span>${HQ_TABS.map(([k, l, ic, c]) =>
+      `<button class="hq-item ${st.tab === k ? 'on' : ''}" data-tab="${k}"><span class="hq-ic">${ic}</span>${l}${c ? `<span class="cnt">${c}</span>` : ''}</button>`).join('')}</div></nav>` : ''}
     </header>
     <main id="main"></main>
     ${!isAdmin() && tabs.length > 1 ? `<nav class="bnav" style="--n:${tabs.length}">${tabs.map(([k, l, c]) => `<button class="${st.tab === k ? 'on' : ''}" data-tab="${k}"><span class="bi">${ICON[k]}${c ? `<i>${c}</i>` : ''}</span>${l}</button>`).join('')}</nav>` : ''}`;
@@ -295,7 +302,12 @@ async function render() {
     Object.assign(st, { tab: t, q: '', filter: 'all', libCat: null, libPage: null, libQ: '', faqCat: '전체', faqQ: '', faqOpen: null });
     window.scrollTo(0, 0); render();
   };
-  app.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => goTab(b.dataset.tab));
+  app.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { if (!b.classList.contains('hq-item')) st.hqOpen = false; goTab(b.dataset.tab); });
+  const hqBtn = app.querySelector('#hqBtn');
+  if (hqBtn) hqBtn.onclick = () => {
+    const sub = app.querySelector('#hqSub'), open = sub.hidden;
+    sub.hidden = !open; st.hqOpen = open; hqBtn.setAttribute('aria-expanded', String(open));
+  };
   app.querySelector('.brand').onclick = () => goTab('home');
   if (st.tab === 'notices') safeLS.set(seenKey, new Date().toISOString());
   const main = app.querySelector('#main');
@@ -1768,7 +1780,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=a8cdbb4'), import('./docfill.js?v=a8cdbb4'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=fd7322e'), import('./docfill.js?v=fd7322e'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1914,7 +1926,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=a8cdbb4')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=fd7322e')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부의 첫 장에 걸쳐</span><span><b>간인</b> 쪽과 쪽 사이에 걸쳐</span></div>
@@ -2433,7 +2445,7 @@ async function cleanSeal(file) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=a8cdbb4');
+  const V = await import('./viewer.js?v=fd7322e');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2462,6 +2474,12 @@ async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, seal
 }
 
 async function viewContracts(main) {
+  const { error: te } = await sb.from('contracts').select('id', { head: true, count: 'exact' }).limit(1);
+  if (te && /contracts|schema cache|does not exist/i.test(te.message || '')) {
+    main.innerHTML = `<div class="empty"><b>전자계약 데이터베이스가 아직 준비되지 않았습니다.</b><br>${isAdmin()
+      ? 'Supabase → SQL Editor에서 <code>supabase/v9_contracts.sql</code> 내용을 붙여넣고 Run 해 주세요. 한 번만 하면 됩니다.' : '본사에서 준비 중입니다. 잠시 후 다시 확인해 주세요.'}</div>`;
+    return;
+  }
   if (isAdmin() && st.ctEdit) return ctEditView(main);
   if (st.ctId) return ctDetailView(main);
   return isAdmin() ? ctListHq(main) : ctListAgency(main);
