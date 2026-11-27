@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=74d8b46';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=91d596b';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1781,7 +1781,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=74d8b46'), import('./docfill.js?v=74d8b46'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=91d596b'), import('./docfill.js?v=91d596b'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1927,7 +1927,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=74d8b46')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=91d596b')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부의 첫 장에 걸쳐</span><span><b>간인</b> 쪽과 쪽 사이에 걸쳐</span></div>
@@ -2444,9 +2444,24 @@ async function cleanSeal(file) {
   return new Promise((res) => out.toBlob(res, 'image/png'));
 }
 
+// 계인·간인 자동 위치 (PDF 좌표, pt) — 계인: 첫 장 오른쪽 위 여백 / 간인: 2장 이상일 때 모든 장 오른쪽 끝 가운데(절반만 찍힘)
+function ctAutoMarks(sizes, on, w = 57) {
+  if (!on || !sizes || sizes.length < 2) return [];
+  const n = sizes.length - 1, s1 = sizes[1];
+  const out = [{ t: '계인', p: 1, x: Math.round(s1.w - w * 1.15), y: Math.round(s1.h - w * 0.62), w }];
+  if (n >= 2) for (let p = 1; p <= n; p++) out.push({ t: '간인', p, x: Math.round(sizes[p].w), y: Math.round(sizes[p].h / 2), w });
+  return out;
+}
+function ctMarkSummary(marks = []) {
+  const k = (t) => marks.filter((m) => (m.t || '날인') === t);
+  const sign = k('날인');
+  return [sign.length ? `서명란 ${sign.length}곳(${[...new Set(sign.map((m) => m.p))].join(', ')}쪽)` : '',
+    k('계인').length ? '계인 1곳(첫 장)' : '', k('간인').length ? `간인 ${k('간인').length}곳(모든 장)` : ''].filter(Boolean).join(' · ');
+}
+
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=74d8b46');
+  const V = await import('./viewer.js?v=91d596b');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2460,10 +2475,11 @@ async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, seal
     const s = width / sz.w;
     marks.forEach((m, i) => {
       if (m.p !== n) return;
-      const el = document.createElement('div'); el.className = 'ct-mark' + (sealUrl ? ' seal' : '');
+      const el = document.createElement('div'); el.className = 'ct-mark' + (sealUrl ? ' seal' : '') + (m.t ? ' auto' : '');
       Object.assign(el.style, { left: `${(m.x - m.w / 2) * s}px`, top: `${(sz.h - m.y - m.w / 2) * s}px`, width: `${m.w * s}px`, height: `${m.w * s}px` });
-      el.innerHTML = sealUrl ? `<img src="${esc(sealUrl)}" alt="">` : '<span>대리점<br>날인</span>';
-      if (onMarkClick) el.onclick = (e) => { e.stopPropagation(); onMarkClick(i); };
+      el.innerHTML = sealUrl ? `<img src="${esc(sealUrl)}" alt="">` : `<span>${m.t ? `대리점<br>${esc(m.t)}` : '대리점<br>날인'}</span>`;
+      if (m.t) el.title = m.t === '계인' ? '계인 — 첫 장 상단 (자동)' : '간인 — 쪽 오른쪽 끝, 절반만 찍힘 (자동)';
+      if (onMarkClick) el.onclick = (e) => { e.stopPropagation(); if (!m.t) onMarkClick(i); };
       wrap.appendChild(el);
     });
     if (onPageClick) wrap.onclick = (e) => {
@@ -2545,7 +2561,8 @@ async function ctEditView(main) {
     if (!c || !['draft', 'rejected', 'sent'].includes(c.status)) { st.ctEdit = null; return render(); }
   }
   const mine = agencies;
-  let bytes = c ? await getBytes(c.src_path) : null, newFile = null, marks = c ? [...c.marks] : [];
+  // marks: 사용자가 누른 서명란 날인만. 계인·간인(t 표시)은 쪽 크기로 자동 계산
+  let bytes = c ? await getBytes(c.src_path) : null, newFile = null, marks = c ? c.marks.filter((m) => !m.t) : [], sizes = [];
   main.innerHTML = `<div class="ct">
     <div class="crumbs"><a href="#" id="ctBack">전자계약</a> › <span>${c ? `${ctNo(c.id)} 수정` : '새 계약'}</span></div>
     <div class="ct-edit">
@@ -2556,8 +2573,10 @@ async function ctEditView(main) {
         <label class="field"><span>계약명</span><input name="title" required maxlength="120" value="${esc(c?.title || '')}" placeholder="예) 2027년 수수료 특약서"></label>
         <label class="field"><span>대리점 안내 문구 (선택)</span><textarea name="memo" rows="3" placeholder="예) 12월 정산부터 적용되는 특약입니다.">${esc(c?.memo || '')}</textarea></label>
         <label class="field"><span>계약서 PDF ${c ? '(바꿀 때만)' : ''}</span><input type="file" id="ctFile" accept="application/pdf,.pdf" ${c ? '' : 'required'}></label>
-        <div class="ct-markinfo"><b>대리점 날인 위치 <span id="mkCnt">${marks.length}</span>곳</b>
-          <p class="hint">오른쪽 문서에서 대리점 도장이 찍힐 자리(“(인)” 위 등)를 누르세요. 표시를 다시 누르면 지워집니다.</p>
+        <div class="ct-markinfo"><b>서명란 날인 <span id="mkCnt">${marks.length}</span>곳</b>
+          <p class="hint">오른쪽 문서에서 대리점 도장이 찍힐 서명란(“(인)” 자리)을 누르세요. 표시를 다시 누르면 지워집니다.</p>
+          <label class="ct-auto"><input type="checkbox" id="mkAuto" checked> 계인·간인 자동으로 찍기
+            <small>첫 장 오른쪽 위 계인 1곳 + (2장 이상이면) 모든 장 오른쪽 끝에 간인 — <span id="mkAutoCnt"></span></small></label>
           <label class="field inline"><span>도장 크기</span><select id="mkSize">${[[42, '작게 (1.5cm)'], [57, '보통 (2cm)'], [71, '크게 (2.5cm)']].map(([v, l]) => `<option value="${v}" ${v === 57 ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
         ${c?.status === 'rejected' && c.reject_reason ? `<div class="ct-warn"><b>대리점 수정 요청</b><br>${esc(c.reject_reason)}</div>` : ''}
         <div class="ct-btns"><button type="button" class="btn" id="ctSave">임시 저장</button><button class="btn primary" id="ctSend">대리점에 날인 요청</button></div>
@@ -2566,19 +2585,27 @@ async function ctEditView(main) {
     </div></div>`;
   const docBox = main.querySelector('#ctDoc'), f = main.querySelector('#ctf');
   main.querySelector('#ctBack').onclick = (e) => { e.preventDefault(); st.ctEdit = null; render(); };
+  const autoMarks = () => ctAutoMarks(sizes, main.querySelector('#mkAuto').checked, Number(main.querySelector('#mkSize').value));
   const redraw = async () => {
     main.querySelector('#mkCnt').textContent = marks.length;
-    if (!bytes) return;
+    if (!bytes) { main.querySelector('#mkAutoCnt').textContent = ''; return; }
     const y = window.scrollY;
-    await ctRenderPages(docBox, bytes, marks, {
+    const draw = () => ctRenderPages(docBox, bytes, [...marks, ...autoMarks()], {
       onPageClick: (pt) => { const w = Number(main.querySelector('#mkSize').value); marks.push({ ...pt, w }); redraw(); },
       onMarkClick: (i) => { marks.splice(i, 1); redraw(); } });
+    const r = await draw();
+    if (!sizes.length) { sizes = r.sizes; await draw(); } // 첫 표시 때 쪽 크기를 알고 나서 자동 위치 다시 그림
+    const a = autoMarks();
+    main.querySelector('#mkAutoCnt').textContent = main.querySelector('#mkAuto').checked
+      ? `계인 ${a.filter((m) => m.t === '계인').length}곳 · 간인 ${a.filter((m) => m.t === '간인').length}곳` : '사용 안 함';
     window.scrollTo(0, y);
   };
+  main.querySelector('#mkAuto').onchange = redraw;
+  main.querySelector('#mkSize').onchange = redraw;
   main.querySelector('#ctFile').onchange = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     if (!PDF_EXT.test(file.name)) { toast('PDF 파일만 올릴 수 있습니다.', true); e.target.value = ''; return; }
-    newFile = file; bytes = new Uint8Array(await file.arrayBuffer()); marks = []; redraw();
+    newFile = file; bytes = new Uint8Array(await file.arrayBuffer()); marks = []; sizes = []; redraw();
   };
   await redraw();
   const save = async (send) => {
@@ -2586,9 +2613,9 @@ async function ctEditView(main) {
     if (!c && !v.agency_code) throw new Error('대리점을 선택하세요.');
     if (!v.title.trim()) throw new Error('계약명을 입력하세요.');
     if (!bytes) throw new Error('계약서 PDF를 선택하세요.');
-    if (send && !marks.length) throw new Error('대리점 날인 위치를 1곳 이상 지정하세요.');
+    if (send && !marks.length) throw new Error('서명란 날인 위치를 1곳 이상 지정하세요.');
     const code = c?.agency_code || v.agency_code;
-    const row = { title: v.title.trim(), kind: v.kind, memo: v.memo.trim() || null, marks };
+    const row = { title: v.title.trim(), kind: v.kind, memo: v.memo.trim() || null, marks: [...marks, ...autoMarks()] };
     if (newFile) {
       const path = `${code}/contracts/${crypto.randomUUID()}_src.pdf`;
       const { error: ue } = await sb.storage.from(BUCKET).upload(path, newFile, { contentType: 'application/pdf' }); if (ue) throw ue;
@@ -2732,12 +2759,14 @@ async function ctDetailView(main) {
     <div class="ct-detail">
       <div class="ct-side">
         <section class="card ct-info">
-          <div class="ct-r1">${ctBadge(c.status)}<span class="muted">${ctNo(c.id)} · ${esc(c.kind)}</span></div>
+          <div class="ct-r1">${ctBadge(c.status)}<span class="muted">${esc(c.kind)} · 문서번호 ${ctNo(c.id)}</span></div>
           <h2>${esc(c.title)}</h2>
           <div class="muted">${esc(c.agency_code)} ${esc(agencyName(c.agency_code))}</div>
           ${c.memo ? `<div class="ct-memo">${esc(c.memo)}</div>` : ''}
           ${c.status === 'rejected' && c.reject_reason ? `<div class="ct-warn"><b>수정 요청</b><br>${esc(c.reject_reason)}</div>` : ''}
-          ${step >= 0 ? `<ol class="ct-steps h">${['본사 작성', '대리점 날인', '본사 날인', '체결 완료'].map((l, i) => `<li class="${i < step || step === 3 ? 'done' : i === step ? 'now' : ''}">${l}</li>`).join('')}</ol>` : ''}
+          ${step >= 0 ? `<ol class="ct-steps h">${['본사 작성', '대리점 날인', '본사 날인', '체결 완료'].map((l, i) => `<li class="${i < step || step === 3 ? 'done' : i === step ? 'now' : ''}">${l}</li>`).join('')}</ol>
+            <p class="ct-stepnow muted">${['', '지금 단계: 대리점 대표자의 동의·날인을 기다리는 중', '지금 단계: 본사가 출력해 실물 날인 후 날인본을 올릴 차례', ''][step] || ''}</p>` : ''}
+          ${c.marks?.length ? `<p class="ct-stepnow muted">대리점 날인: ${esc(ctMarkSummary(c.marks))}</p>` : ''}
           <div class="ct-files">
             <button class="btn small" data-dl="src">원본 PDF</button>
             ${c.signed_path ? '<button class="btn small" data-dl="signed">대리점 날인본</button>' : ''}
@@ -2874,7 +2903,7 @@ async function ctSign(c, seal, pw) {
     ['날인자', `${myName()} (대표자 · ${me.email})`], ['본인 확인', '파트너센터 로그인 + 비밀번호 재확인'],
     ['날인 이미지', `${seal.kind} · 본사 승인 ${fmt(seal.approved_at).slice(0, 10)} (전자날인 사용 동의서 수령)`],
     ['동의 시각', `${fmt(now)} (이용 기기 기준, 서버 기록 시각은 파트너센터에 보관)`], ['접속 환경', `${env} · ${br}`],
-    ['원본 SHA-256', srcHash], ['날인 위치', `${c.marks.length}곳 (${[...new Set(c.marks.map((m) => m.p))].join(', ')}쪽)`]];
+    ['원본 SHA-256', srcHash], ['날인 위치', ctMarkSummary(c.marks)]];
   rows.forEach(([k, v]) => {
     const lines = wrapText(font, v, 9.5, R - L - 130), hh = Math.max(26, lines.length * 14 + 12);
     pg.drawRectangle({ x: L, y: y - hh + 18, width: R - L, height: hh, borderColor: rgb(0, 0, 0), borderWidth: 0.5 });

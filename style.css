@@ -781,3 +781,13 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .ag-filter { width: 100%; margin-bottom: 6px; }
 .agency-pick label[hidden] { display: none; }
 @media (max-width: 720px) { .bar .ag-combo { min-width: 0; width: 100%; } }
+
+/* ---------- 전자계약: 계인·간인 자동 ---------- */
+.ct-pg { overflow: hidden; } /* 간인은 쪽 끝에 걸쳐 절반만 보이게 */
+.ct-mark.auto { border-color: #d97706; background: rgba(217,119,6,.08); cursor: help; }
+.ct-mark.auto span { color: #b45309; }
+.ct-mark.auto.seal { border: 0; background: none; animation: none; }
+.ct-auto { display: block; font-size: 13.5px; margin: 8px 0 2px; cursor: pointer; }
+.ct-auto input { margin-right: 4px; vertical-align: -2px; }
+.ct-auto small { display: block; color: var(--muted); font-size: 12px; margin: 2px 0 0 22px; }
+.ct-stepnow { font-size: 12.5px; margin: 8px 0 0; }
