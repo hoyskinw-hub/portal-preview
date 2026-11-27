@@ -857,3 +857,24 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   box-shadow: 0 3px 6px rgba(0,0,0,.12); display: grid; place-items: center; }
 .ag-foldov span { font-size: 10.5px; color: #6b7686; line-height: 1.2; }
 .ag-stamp.opt { border-style: dashed; color: #b3261e; font-size: 9.5px; letter-spacing: -.03em; background: rgba(255,255,255,.75); }
+
+/* ---------- 메뉴 권한 ---------- */
+.h-grid.one { grid-template-columns: 1fr; }
+.mn-q { max-width: 360px; margin: 4px 0 10px; }
+.mn-wrap { padding: 0; overflow: auto; }
+.mn-tbl { min-width: 760px; }
+.mn-tbl th, .mn-tbl td { text-align: center; vertical-align: middle; }
+.mn-tbl th.l, .mn-tbl td.l { text-align: left; }
+.mn-tbl th small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+.mn-all { font-size: 11.5px; font-weight: 400; margin-top: 3px; color: var(--muted); }
+.mn-all .link { font-size: 11.5px; padding: 0 2px; }
+.mn-tbl tbody tr[hidden] { display: none; }
+.mn-tbl tbody tr.mn-saved td { background: #ecfdf3; transition: background .3s; }
+.mn-at { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.mn-sw { position: relative; display: inline-block; width: 38px; height: 22px; cursor: pointer; }
+.mn-sw input { opacity: 0; width: 0; height: 0; position: absolute; }
+.mn-sw span { position: absolute; inset: 0; background: #cfd5df; border-radius: 22px; transition: .15s; }
+.mn-sw span::after { content: ''; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: .15s; }
+.mn-sw input:checked + span { background: var(--brand); }
+.mn-sw input:checked + span::after { transform: translateX(16px); }
+.mn-sw input:focus-visible + span { outline: 2px solid var(--brand); outline-offset: 2px; }

@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=7956aee';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=a054587';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -24,6 +24,10 @@ document.title = cfg.SITE_TITLE || document.title;
 
 let me = null;            // 내 profile
 let agencies = [];        // 관리자: 전체 / 대리점: 자기 것
+let menuOff = new Set();  // 대리점: 본사가 꺼 둔 메뉴 (agency_menus)
+// 본사가 대리점별로 켜고 끌 수 있는 메뉴 (홈은 항상 보임)
+const MENU_DEFS = [['notices', '공지사항'], ['library', '자료실'], ['faq', 'FAQ'], ['board', '1:1 문의'], ['contracts', '전자계약', '대표자만'], ['myagency', '우리 대리점', '대표자만']];
+const menuOn = (k) => isAdmin() || !menuOff.has(k);
 const ST0 = { tab: 'home', agency: null, filter: 'all', postId: null, compose: false,
              q: '', gq: '', obId: null, obEdit: null, obFilter: 'active', faqCat: '전체', faqQ: '', faqOpen: null, noticeId: null, noticeEdit: null, libCat: null, libPage: null, libEdit: null, libQ: '', ctId: null, ctEdit: null, ctFilter: 'todo' };
 const st = { ...ST0 };
@@ -266,6 +270,12 @@ async function render() {
     const { count, error: ce } = await sb.from('contracts').select('id', { count: 'exact', head: true }).eq('status', isAdmin() ? 'agency_signed' : 'sent');
     ctCnt = count || 0; ctReady = !ce;
   }
+  // 대리점: 본사가 꺼 둔 메뉴
+  if (!isAdmin() && !isProspect() && me.agency_code) {
+    const { data: mo, error: moe } = await sb.from('agency_menus').select('hidden').eq('agency_code', me.agency_code).maybeSingle();
+    menuOff = new Set(!moe && mo ? mo.hidden || [] : []);
+    if (menuOff.has(st.tab)) { resetView(); st.tab = 'home'; }
+  }
   // 문의 알림: 본사 = 답변이 필요한 문의 수 / 대리점 = 아직 읽지 않은 새 답변 수
   const lastCmt = (p) => (p.comments || []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at)).pop();
   let qCnt = 0;
@@ -280,13 +290,13 @@ async function render() {
   }
   // 본사: 공통 메뉴 + [본사 관리] 묶음 (누르면 바로 아래에 하위 메뉴)
   const HQ_TABS = [['inbox', '최근 문의', '💬', qCnt], ['board', '대리점별 게시판', '🗂'], ['files', '대리점 자료함', '📁'], ['onboarding', '개설 신청', '📝', obPending],
-    ['contracts', '전자계약', '✍️', ctCnt], ['users', '가입 승인', '🙋', pendingCnt], ['agencies', '대리점 관리', '🏢']].filter(([k]) => isSuper() || k !== 'agencies');
+    ['contracts', '전자계약', '✍️', ctCnt], ['users', '가입 승인', '🙋', pendingCnt], ['menus', '메뉴 권한', '🔐'], ['agencies', '대리점 관리', '🏢']].filter(([k]) => isSuper() || k !== 'agencies');
   const inHq = isAdmin() && HQ_TABS.some(([k]) => k === st.tab);
   const hqSum = HQ_TABS.reduce((a, t) => a + (t[3] || 0), 0);
   const tabs = isProspect() ? [['onboard', '대리점 개설 신청']] : isAdmin()
     ? [['home', '홈'], ['notices', '공지사항'], ['library', '자료실'], ['faq', 'FAQ']]
     : [['home', '홈'], ['notices', '공지사항', newNotice], ['library', '자료실'], ['faq', 'FAQ'], ['board', '1:1 문의', qCnt],
-       ['contracts', '전자계약', ctCnt], ['myagency', '우리 대리점', memberPending]].filter(([k]) => (isOwner() || !OWNER_ONLY.has(k)) && (k !== 'contracts' || ctReady));
+       ['contracts', '전자계약', ctCnt], ['myagency', '우리 대리점', memberPending]].filter(([k]) => (isOwner() || !OWNER_ONLY.has(k)) && (k !== 'contracts' || ctReady) && menuOn(k));
   const ICON = { home: '🏠', notices: '📢', library: '📚', faq: '❓', board: '💬', myagency: '🏢', contracts: '✍️' };
   if (!isAdmin() && !tabs.some(([k]) => k === st.tab) && !(st.tab === 'search' && !isProspect())) st.tab = tabs[0][0];
   const whoName = isProspect() ? `<b>${esc(me.requested_name || '신규 대리점')}</b> · ${esc(me.contact_name || me.email)} <span class="role-chip">신규 대리점</span>` : isAdmin() ? `${esc(me.contact_name || me.email)} <span class="role-chip owner">${isSuper() ? '총관리자' : '본사 담당자'}</span>` : `<b>${esc(agencyName(me.agency_code))}</b> · ${esc(me.contact_name || me.email)} <span class="role-chip ${me.agency_role}">${ROLE_LABEL[me.agency_role] || '직원'}</span>`;
@@ -325,7 +335,7 @@ async function render() {
   // 로그인 후 처음 한 번: 새 알림 요약 팝업
   if (!isProspect()) showLoginBrief(isAdmin()
     ? [['inbox', '답변이 필요한 문의', qCnt], ['contracts', '본사 날인이 필요한 전자계약', ctCnt], ['users', '가입 승인 대기', pendingCnt], ['onboarding', '검토할 개설 신청', obPending]]
-    : [['board', '답변이 도착한 문의', qCnt], ['notices', '새 공지사항', newNotice || 0], ['contracts', '날인할 전자계약', ctReady ? ctCnt : 0], ['myagency', '직원 가입 승인 대기', memberPending]],
+    : [['board', '답변이 도착한 문의', qCnt], ['notices', '새 공지사항', newNotice || 0], ['contracts', '날인할 전자계약', ctReady ? ctCnt : 0], ['myagency', '직원 가입 승인 대기', memberPending]].filter(([k]) => menuOn(k)),
   goTab, { seenNotice: safeLS.get(seenKey) || '1970-01-01' });
   if (st.tab === 'notices') safeLS.set(seenKey, new Date().toISOString());
   const main = app.querySelector('#main');
@@ -347,6 +357,7 @@ async function render() {
     if (st.tab === 'files') return await viewFiles(main);
     if (st.tab === 'users') return await viewUsers(main);
     if (st.tab === 'agencies') return isSuper() ? await viewAgencies(main) : viewHome(main, { pendingCnt });
+    if (st.tab === 'menus') return isAdmin() ? await viewMenus(main) : viewHome(main, { pendingCnt });
   } catch (e) { fail(e); main.innerHTML = '<div class="empty">불러오지 못했습니다.</div>'; }
 }
 
@@ -654,6 +665,49 @@ async function viewUsers(main) {
 }
 
 // ---------------- 관리자: 대리점 관리 ----------------
+// =====================================================================
+//  메뉴 권한 (본사): 담당 대리점별로 대리점 쪽 메뉴를 켜고 끔
+// =====================================================================
+async function viewMenus(main) {
+  const { data: rows, error } = await sb.from('agency_menus').select('agency_code,hidden,updated_by,updated_at');
+  if (error) { main.innerHTML = `<div class="card empty">메뉴 권한 기능을 쓰려면 데이터베이스 변경(v10_agency_menus.sql)을 먼저 적용해야 합니다.</div>`; return; }
+  const H = {}; (rows || []).forEach((r) => { H[r.agency_code] = { hidden: new Set(r.hidden || []), by: r.updated_by, at: r.updated_at }; });
+  const list = agencies.slice().sort((a, b) => String(a.code).localeCompare(String(b.code), 'ko', { numeric: true }));
+  const off = (c, k) => H[c]?.hidden.has(k);
+  main.innerHTML = `<div class="bar"><h2>🔐 메뉴 권한</h2></div>
+    <p class="hint">${isSuper() ? '모든 대리점' : '담당 대리점'}의 메뉴를 켜고 끕니다. 스위치를 끄면 그 대리점의 대표자·직원 화면에서 메뉴가 사라지고, 홈 화면·검색·알림에서도 빠집니다. 바꾸면 바로 저장됩니다.<br>
+    <small>'대표자만' 메뉴는 원래 직원에게는 보이지 않습니다. 홈은 항상 보입니다.</small></p>
+    <input type="text" class="agc-filter mn-q" placeholder="코드 또는 대리점명으로 찾기">
+    <div class="card mn-wrap"><table class="tbl mn-tbl"><thead><tr><th class="l">대리점</th>
+      ${MENU_DEFS.map(([k, l, note]) => `<th><div>${esc(l)}</div>${note ? `<small>${note}</small>` : ''}
+        <div class="mn-all"><button type="button" class="link" data-all="${k}" data-v="1">켜기</button>·<button type="button" class="link" data-all="${k}" data-v="0">끄기</button></div></th>`).join('')}
+      <th class="l">마지막 변경</th></tr></thead>
+    <tbody>${list.map((a) => `<tr data-code="${esc(a.code)}"><td class="l"><b>${esc(a.code)}</b> ${esc(a.name)}</td>
+      ${MENU_DEFS.map(([k]) => `<td><label class="mn-sw"><input type="checkbox" data-k="${k}" ${off(a.code, k) ? '' : 'checked'}><span></span></label></td>`).join('')}
+      <td class="l mn-at">${H[a.code]?.at ? `${esc(H[a.code].by || '')} · ${fmt(H[a.code].at)}` : '<span class="muted">기본(모두 보임)</span>'}</td></tr>`).join('')}</tbody></table></div>
+    ${list.length ? '' : '<div class="card empty">담당 대리점이 없습니다.</div>'}`;
+  const save = async (tr) => {
+    const code = tr.dataset.code;
+    const hidden = [...tr.querySelectorAll('input[data-k]')].filter((c) => !c.checked).map((c) => c.dataset.k);
+    const { data, error: e } = await sb.from('agency_menus').upsert({ agency_code: code, hidden }, { onConflict: 'agency_code' }).select('updated_by,updated_at').single();
+    if (e) throw e;
+    tr.querySelector('.mn-at').textContent = `${data.updated_by || ''} · ${fmt(data.updated_at)}`;
+    tr.classList.add('mn-saved'); setTimeout(() => tr.classList.remove('mn-saved'), 900);
+  };
+  main.querySelectorAll('tbody input[data-k]').forEach((c) => c.onchange = () => save(c.closest('tr')).then(() => toast(`${c.closest('tr').dataset.code} 저장됨`)).catch((e) => { c.checked = !c.checked; fail(e); }));
+  main.querySelectorAll('[data-all]').forEach((b) => b.onclick = async () => {
+    const k = b.dataset.all, v = b.dataset.v === '1';
+    const trs = [...main.querySelectorAll('tbody tr')].filter((tr) => !tr.hidden && tr.querySelector(`input[data-k="${k}"]`).checked !== v);
+    if (!trs.length) return toast('바꿀 대리점이 없습니다.');
+    const label = MENU_DEFS.find((m) => m[0] === k)[1];
+    if (!confirm(`보이는 대리점 ${trs.length}곳의 '${label}' 메뉴를 ${v ? '켤까요' : '끌까요'}?`)) return;
+    try { for (const tr of trs) { tr.querySelector(`input[data-k="${k}"]`).checked = v; await save(tr); } toast(`${trs.length}곳 저장됨`); } catch (e) { fail(e); }
+  });
+  const q = main.querySelector('.mn-q');
+  q.oninput = () => { const t = agNorm(q.value); main.querySelectorAll('tbody tr').forEach((tr) => { tr.hidden = !agMatch(tr.dataset.code, tr.cells[0].textContent.replace(/^\s*\S+\s*/, ''), t); }); };
+  q.dataset.enh = '1';
+}
+
 async function viewAgencies(main) {
   const { data: users } = await sb.from('profiles').select('id,agency_code,status,role,agency_role,contact_name,email,phone,created_at').eq('status', 'approved');
   const mgrs = (users || []).filter((u) => u.role === 'manager');
@@ -1342,17 +1396,17 @@ async function viewSearch(main) {
     sb.from('faqs').select('id,question,category').or(`question.ilike.%${q}%,answer.ilike.%${q}%`).limit(30),
   ]).then((r) => { [n, p, b, fq] = r; return r; }).catch((e) => { throw e; });
   for (const r of [n, p, b, fq]) if (r.error) throw r.error;
-  const total = n.data.length + p.data.length + b.data.length + fq.data.length;
+  const total = (menuOn('notices') ? n.data.length : 0) + (menuOn('library') ? p.data.length : 0) + (menuOn('board') ? b.data.length : 0) + (menuOn('faq') ? fq.data.length : 0);
   const sec = (title, rows) => `<h3 class="section-title">${title} <span class="muted">${rows.length}</span></h3>
     <div class="card list">${rows.length ? rows.join('') : '<div class="empty small">결과 없음</div>'}</div>`;
   main.innerHTML = `<div class="bar"><h2>🔍 "${esc(q)}" 검색 결과 ${total}건</h2></div>
-    ${sec('공지사항', n.data.map((x) => `<div class="item" data-sn="${x.id}"><span class="badge ${pinActive(x) ? 'notice' : 'gray'}">공지</span>
+    ${!menuOn('notices') ? '' : sec('공지사항', n.data.map((x) => `<div class="item" data-sn="${x.id}"><span class="badge ${pinActive(x) ? 'notice' : 'gray'}">공지</span>
       <div class="t">${esc(x.title)}</div><div class="right">${fmt(x.created_at).slice(0, 10)}</div></div>`))}
-    ${sec('FAQ', fq.data.map((x) => `<div class="item" data-sf="${x.id}"><span class="badge question">FAQ</span>
+    ${!menuOn('faq') ? '' : sec('FAQ', fq.data.map((x) => `<div class="item" data-sf="${x.id}"><span class="badge question">FAQ</span>
       <div><div class="t">${esc(x.question)}</div><div class="meta">${esc(x.category)}</div></div><div class="right"></div></div>`))}
-    ${sec('자료실', p.data.map((x) => `<div class="item" data-sp="${x.id}"><span class="badge file">${esc(x.icon)} 자료</span>
+    ${!menuOn('library') ? '' : sec('자료실', p.data.map((x) => `<div class="item" data-sp="${x.id}"><span class="badge file">${esc(x.icon)} 자료</span>
       <div class="t">${esc(x.title)}</div><div class="right">${fmt(x.updated_at).slice(0, 10)}</div></div>`))}
-    ${sec(isAdmin() ? '대리점 게시판' : '1:1 문의', b.data.map((x) => `<div class="item" data-sb="${x.id}" data-ag="${esc(x.agency_code)}"><span class="badge ${x.kind}">${KIND[x.kind]}</span>
+    ${!menuOn('board') ? '' : sec(isAdmin() ? '대리점 게시판' : '1:1 문의', b.data.map((x) => `<div class="item" data-sb="${x.id}" data-ag="${esc(x.agency_code)}"><span class="badge ${x.kind}">${KIND[x.kind]}</span>
       <div><div class="t">${esc(x.title)}</div>${isAdmin() ? `<div class="meta">${esc(x.agency_code)} · ${esc(agencyName(x.agency_code))}</div>` : ''}</div>
       <div class="right">${fmt(x.last_activity).slice(0, 10)}</div></div>`))}`;
   main.querySelectorAll('[data-sf]').forEach((el) => el.onclick = () => { resetView(); Object.assign(st, { tab: 'faq', faqOpen: Number(el.dataset.sf), faqCat: '전체', faqQ: '' }); render(); });
@@ -1474,7 +1528,7 @@ async function viewHome(main, { pendingCnt }) {
   } else {
     const reads = await readMap(mine.data.map((p) => p.id));
     const unread = mine.data.filter((p) => !reads.mine[p.id] || new Date(reads.mine[p.id]) < new Date(p.last_activity));
-    side = `<div class="card h-box"><div class="h-box-head"><h3>💬 1:1 문의</h3><button class="link" data-go="board">전체 보기 ›</button></div>
+    side = !menuOn('board') ? '' : `<div class="card h-box"><div class="h-box-head"><h3>💬 1:1 문의</h3><button class="link" data-go="board">전체 보기 ›</button></div>
       ${mine.data.length ? mine.data.map((p) => `<div class="h-row" data-post="${p.id}"><span class="badge ${p.kind}">${KIND[p.kind]}</span>
         <span class="h-t">${unread.includes(p) ? '<span class="dot"></span>' : ''}${esc(p.title)}</span><span class="h-d">${ago(p.last_activity)}</span></div>`).join('')
         : '<div class="h-empty">담당자와 주고받은 글이 여기에 표시됩니다.</div>'}
@@ -1490,37 +1544,37 @@ async function viewHome(main, { pendingCnt }) {
     ${P ? `<section class="h-sec h-policy"><div class="h-box-head"><h3>📣 ${esc(P.title)} <small class="muted">${esc(P.period)}</small></h3>
       <button class="link" data-polopen>💰 수익 계산해 보기 ›</button></div>${policyCardsHtml(P, true)}</section>` : ''}
 
-    ${isOwner() && ownerPending ? `<button class="h-alert" data-go="myagency"><span class="t">👥 직원 가입 신청 <b>${ownerPending}건</b>이 승인을 기다리고 있습니다</span><span class="go">확인하기 ›</span></button>` : ''}
-    ${pins.data.length ? `<section class="h-pins">${pins.data.map((n) => `<article class="h-pin" data-notice="${n.id}">
+    ${isOwner() && ownerPending && menuOn('myagency') ? `<button class="h-alert" data-go="myagency"><span class="t">👥 직원 가입 신청 <b>${ownerPending}건</b>이 승인을 기다리고 있습니다</span><span class="go">확인하기 ›</span></button>` : ''}
+    ${pins.data.length && menuOn('notices') ? `<section class="h-pins">${pins.data.map((n) => `<article class="h-pin" data-notice="${n.id}">
       <span class="h-pin-tag">📌 중요 공지</span><h3>${esc(n.title)}${isNew(n.created_at) ? ' <span class="new">N</span>' : ''}</h3>
       <p>${esc(plain(n.body, 110)) || '&nbsp;'}</p><span class="h-pin-more">자세히 보기 ›</span></article>`).join('')}</section>` : ''}
 
-    <div class="h-grid">
-      <div class="card h-box"><div class="h-box-head"><h3>📢 최근 공지</h3><button class="link" data-go="notices">전체 보기 ›</button></div>
+    <div class="h-grid${menuOn('notices') && side ? '' : ' one'}">
+      ${!menuOn('notices') ? '' : `<div class="card h-box"><div class="h-box-head"><h3>📢 최근 공지</h3><button class="link" data-go="notices">전체 보기 ›</button></div>
         ${recent.data.length ? recent.data.map((n) => `<div class="h-row" data-notice="${n.id}">
           ${pinActive(n) ? '<span class="badge notice">중요</span>' : '<span class="badge gray">공지</span>'}
           <span class="h-t">${esc(n.title)}${isNew(n.created_at) ? ' <span class="new">N</span>' : ''}</span><span class="h-d">${ago(n.created_at)}</span></div>`).join('')
-          : '<div class="h-empty">등록된 공지가 없습니다.</div>'}</div>
+          : '<div class="h-empty">등록된 공지가 없습니다.</div>'}</div>`}
       ${admin ? `<div>${side}</div>` : side}
     </div>
 
-    ${feat?.length ? `<section class="h-sec"><div class="h-box-head"><h3>⭐ 꼭 보세요</h3><button class="link" data-go="library">자료실 ›</button></div>
+    ${feat?.length && menuOn('library') ? `<section class="h-sec"><div class="h-box-head"><h3>⭐ 꼭 보세요</h3><button class="link" data-go="library">자료실 ›</button></div>
       <div class="pcards">${feat.map((p) => `<div class="pcard feat" data-page="${p.id}">
         <div class="pc-t">${esc(p.title)}</div><div class="pc-m">${esc(catName(p.category_id))}</div></div>`).join('')}</div></section>` : ''}
 
-    ${topFaq?.length ? `<section class="h-sec"><div class="h-box-head"><h3>❓ 자주 묻는 질문</h3><button class="link" data-go="faq">FAQ 전체 ›</button></div>
+    ${topFaq?.length && menuOn('faq') ? `<section class="h-sec"><div class="h-box-head"><h3>❓ 자주 묻는 질문</h3><button class="link" data-go="faq">FAQ 전체 ›</button></div>
       <div class="card h-faq">${topFaq.map((f) => `<button class="h-faq-q" data-faq="${f.id}"><span class="qmark sm">Q</span><span>${esc(f.question)}</span><span class="h-faq-c">${esc(f.category)}</span></button>`).join('')}</div></section>` : ''}
 
-    <section class="h-sec"><div class="h-box-head"><h3>🆕 새로 올라온 자료</h3><button class="link" data-go="library">자료실 ›</button></div>
+    ${!menuOn('library') ? '' : `<section class="h-sec"><div class="h-box-head"><h3>🆕 새로 올라온 자료</h3><button class="link" data-go="library">자료실 ›</button></div>
       ${pages.data.length ? `<div class="pcards">${pages.data.map((p) => {
         const fresh = daysAgo(p.created_at) < 7, upd = !fresh && daysAgo(p.updated_at) < 7;
         return `<div class="pcard" data-page="${p.id}">
           <div class="pc-t">${esc(p.title)}${fresh ? ' <span class="new">NEW</span>' : upd ? ' <span class="new upd">UP</span>' : ''}</div>
           <div class="pc-m">${esc(catName(p.category_id))} · ${ago(p.updated_at)}</div></div>`; }).join('')}</div>`
-        : '<div class="card h-empty">아직 등록된 자료가 없습니다.</div>'}</section>
+        : '<div class="card h-empty">아직 등록된 자료가 없습니다.</div>'}</section>`}
 
-    <section class="h-sec"><div class="h-box-head"><h3>📚 자료실 바로가기</h3></div>
-      <div class="h-cats">${tops.map((c, i) => `<button class="h-cat" data-cat="${c.id}">${numBadge(i + 1)}${esc(c.name)}</button>`).join('')}</div></section>`;
+    ${!menuOn('library') ? '' : `<section class="h-sec"><div class="h-box-head"><h3>📚 자료실 바로가기</h3></div>
+      <div class="h-cats">${tops.map((c, i) => `<button class="h-cat" data-cat="${c.id}">${numBadge(i + 1)}${esc(c.name)}</button>`).join('')}</div></section>`}`;
 
   const go = (patch) => { resetView(); Object.assign(st, { q: '', filter: 'all', libCat: null, libPage: null, libQ: '' }, patch); window.scrollTo(0, 0); render(); };
   main.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => go({ tab: b.dataset.go }));
@@ -1874,7 +1928,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=7956aee'), import('./docfill.js?v=7956aee'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=a054587'), import('./docfill.js?v=a054587'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2025,7 +2079,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=7956aee')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=a054587')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2665,7 +2719,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=7956aee');
+  const V = await import('./viewer.js?v=a054587');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2806,7 +2860,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=7956aee');
+    const V = await import('./viewer.js?v=a054587');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
@@ -2834,6 +2888,10 @@ async function ctEditView(main) {
     if (!bytes) throw new Error('계약서 PDF를 선택하세요.');
     if (send && !marks.length) throw new Error('서명란 날인 위치를 1곳 이상 지정하세요.');
     const code = c?.agency_code || v.agency_code;
+    if (send) { // 메뉴 권한에서 전자계약을 꺼 둔 대리점이면 보내도 볼 수 없음
+      const { data: mo } = await sb.from('agency_menus').select('hidden').eq('agency_code', code).maybeSingle();
+      if ((mo?.hidden || []).includes('contracts')) throw new Error(`${code} ${agencyName(code)}은(는) 메뉴 권한에서 전자계약이 꺼져 있어 대리점이 볼 수 없습니다. [메뉴 권한]에서 켠 뒤 보내 주세요.`);
+    }
     const row = { title: v.title.trim(), kind: v.kind, memo: v.memo.trim() || null, marks: [...marks, ...autoMarks()] };
     if (newFile) {
       const path = `${code}/contracts/${crypto.randomUUID()}_src.pdf`;
