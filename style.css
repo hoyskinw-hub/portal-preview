@@ -609,3 +609,35 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .ob-redo { flex-basis: 100%; font-size: 13px; }
 .ob-redo summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 .ob-redo div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+/* 정책 요약 */
+.pol-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.pol-card { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 16px; cursor: pointer; border-top: 4px solid #9aa4b2; }
+.pol-card:hover { box-shadow: 0 4px 14px rgba(21,34,59,.08); }
+.pol-card.t-green { border-top-color: #03a94d; } .pol-card.t-lime { border-top-color: #49c75a; } .pol-card.t-red { border-top-color: #e04b37; }
+.pol-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.pol-tag { font-size: 12px; font-weight: 700; color: #15223b; background: #eef2f8; border-radius: 6px; padding: 2px 8px; }
+.t-green .pol-tag, .t-lime .pol-tag { background: #e6f7ec; color: #087a3a; } .t-red .pol-tag { background: #fdecea; color: #b3261e; }
+.pol-until { font-size: 11.5px; color: var(--muted); }
+.pol-unit { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.pol-big { font-size: 26px; font-weight: 800; letter-spacing: -.02em; color: #15223b; line-height: 1.25; }
+.t-green .pol-big { color: #087a3a; } .t-lime .pol-big { color: #1f9a3a; } .t-red .pol-big { color: #c4321f; }
+.pol-card ul { margin: 8px 0 0; padding-left: 16px; font-size: 12.5px; line-height: 1.6; color: #3a4556; }
+.pol-more { display: inline-block; margin-top: 8px; font-size: 12px; color: var(--brand); }
+.pol-cards.compact .pol-big { font-size: 22px; }
+.h-policy h3 small { font-weight: 400; font-size: 12px; margin-left: 6px; }
+.pol-head { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.pol-period { display: inline-block; font-size: 12px; font-weight: 600; color: #087a3a; background: #e6f7ec; border-radius: 999px; padding: 2px 10px; margin-right: 6px; }
+.pol-calc { margin-top: 16px; background: #f6f8fb; border-radius: 12px; padding: 14px 16px; }
+.pol-calc h4 { margin: 0 0 10px; font-size: 15px; }
+.pol-in { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 14px; }
+.pol-in input { width: 84px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font: inherit; text-align: right; margin: 0 4px; }
+.pol-tbl { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
+.pol-tbl td { padding: 6px 4px; border-bottom: 1px solid #e3e8ef; } .pol-tbl td:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pol-tbl tr.sum td { border-bottom: 0; font-weight: 800; font-size: 16px; color: #c4321f; padding-top: 10px; }
+.pol-notes { margin: 12px 0 0; padding-left: 16px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+@media (max-width: 900px) { .pol-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .pol-cards { grid-template-columns: 1fr; } .pol-big { font-size: 22px; } }
+.pol .pol-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pol-top { flex-wrap: wrap; } .pol-tag { white-space: nowrap; }
+@media (max-width: 520px) { .pol .pol-cards { grid-template-columns: 1fr; } }

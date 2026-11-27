@@ -1227,6 +1227,71 @@ function ago(d) {
   return fmt(d).slice(0, 10);
 }
 
+// ---------- 정책 요약 (홈 화면 · 로그인 팝업) ----------
+let policyCache;
+async function loadPolicy() {
+  if (policyCache !== undefined) return policyCache;
+  try {
+    const { data, error } = await sb.storage.from(BUCKET).download('common/policy-summary.json');
+    policyCache = error ? null : JSON.parse(await data.text());
+  } catch { policyCache = null; }
+  return policyCache;
+}
+const won = (m) => `${Math.round(m).toLocaleString('ko-KR')}만원`;
+function policyCardsHtml(P, compact = false) {
+  return `<div class="pol-cards ${compact ? 'compact' : ''}">${P.cards.map((c, i) => `<article class="pol-card t-${esc(c.tone || 'gray')}" ${c.page ? `data-polpage="${esc(c.page)}"` : ''}>
+    <div class="pol-top"><span class="pol-tag">${esc(c.tag)}</span>${c.until ? `<span class="pol-until">${esc(c.until)}</span>` : ''}</div>
+    <div class="pol-unit">${esc(c.unit)}</div><div class="pol-big">${esc(c.big)}</div>
+    ${compact ? '' : `<ul>${c.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>`}
+    ${c.page ? '<span class="pol-more">자세히 ›</span>' : ''}</article>`).join('')}</div>`;
+}
+function policyCalc(P, n, m) {
+  const C = P.calc.connect, Q = P.calc.qr, rows = [];
+  if (n > 0) {
+    rows.push([`Npay connect 대리점 수령액 (${n}대 × ${C.per}만)`, n * C.per]);
+    rows.push([`H/W 설치수수료 (${n}대 × ${C.hw}만)`, n * C.hw]);
+    for (const [every, amt] of C.cum) { const k = Math.floor(n / every); if (k) rows.push([`누적 설치 인센티브 (${every.toLocaleString()}대당 ${won(amt)} × ${k})`, k * amt]); }
+    for (const [at, amt] of C.milestones) if (n >= at) rows.push([`누적 ${at.toLocaleString()}대 달성`, amt]);
+  }
+  if (m > 0) {
+    rows.push([`이지QR 설치 (${m}곳 × ${Q.per}만)`, m * Q.per]);
+    const tier = [...Q.tiers].reverse().find(([at]) => m >= at);
+    if (tier) rows.push([`이지QR 우수 대리점 (${tier[0]}곳 이상)`, tier[1]]);
+  }
+  return rows;
+}
+function policyHtml(P) {
+  return `<div class="pol">
+    <p class="pol-head"><span class="pol-period">${esc(P.period)}</span> ${esc(P.headline)}</p>
+    ${policyCardsHtml(P)}
+    <section class="pol-calc"><h4>💰 우리 대리점 예상 수익 계산</h4>
+      <div class="pol-in"><label>Npay connect 설치 <input type="number" min="0" step="1" value="10" id="pcN"> 대</label>
+        <label>네이버 이지QR 설치 <input type="number" min="0" step="1" value="50" id="pcM"> 곳</label></div>
+      <div id="pcOut"></div></section>
+    <ul class="pol-notes">${(P.notes || []).map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+}
+function bindPolicy(root, P) {
+  const out = root.querySelector('#pcOut');
+  const upd = () => {
+    const n = Math.max(0, Math.floor(Number(root.querySelector('#pcN')?.value) || 0)), m = Math.max(0, Math.floor(Number(root.querySelector('#pcM')?.value) || 0));
+    const rows = policyCalc(P, n, m), sum = rows.reduce((a, r) => a + r[1], 0);
+    if (out) out.innerHTML = rows.length ? `<table class="pol-tbl">${rows.map(([l, v]) => `<tr><td>${esc(l)}</td><td>${won(v)}</td></tr>`).join('')}
+      <tr class="sum"><td>예상 합계 (VAT 별도)</td><td>${won(sum)}</td></tr></table>` : '<div class="muted">설치 수량을 넣어 보세요.</div>';
+  };
+  root.querySelectorAll('#pcN, #pcM').forEach((i) => i.oninput = upd); upd();
+  root.querySelectorAll('[data-polpage]').forEach((el) => el.onclick = async () => {
+    const { data } = await sb.from('lib_pages').select('id').eq('title', el.dataset.polpage).limit(1).maybeSingle();
+    document.querySelectorAll('.modal-bg').forEach((x) => x.remove());
+    resetView(); Object.assign(st, { tab: 'library', libPage: data?.id || null, libCat: null }); window.scrollTo(0, 0); render();
+  });
+}
+function showPolicy(P) {
+  try { localStorage.setItem('policy_seen_' + P.version, '1'); } catch { /* 저장 불가 환경 */ }
+  modal(`📣 ${P.title}`, `<div id="polBox">${policyHtml(P)}</div>`, async () => {}, '확인했어요', true);
+  const box = document.querySelector('#polBox'); if (box) bindPolicy(box, P);
+}
+function policySeen(P) { try { return !!localStorage.getItem('policy_seen_' + P.version); } catch { return true; } }
+
 async function viewHome(main, { pendingCnt }) {
   const admin = isAdmin();
   const [pins, recent, pages, cats, mine] = await Promise.all([
@@ -1246,6 +1311,7 @@ async function viewHome(main, { pendingCnt }) {
   const { data: feat } = await sb.from('lib_pages').select('id,title,icon,category_id,updated_at').eq('featured', true).order('sort').order('updated_at', { ascending: false }).limit(6);
   const catName = (id) => { const c = cats.data.find((x) => x.id === id); return c ? `${c.icon} ${c.name}` : ''; };
   const tops = cats.data.filter((c) => !c.parent_id);
+  const P = await loadPolicy();
   const now = new Date(); const wd = '일월화수목금토'[now.getDay()];
   const who = admin ? `${esc(me.contact_name || '본사')}님` : `${esc(agencyName(me.agency_code))} ${esc(me.contact_name || '')}님`;
 
@@ -1271,6 +1337,9 @@ async function viewHome(main, { pendingCnt }) {
       <h2>안녕하세요, ${who}</h2><p>${admin ? '오늘 대리점에 전할 소식과 자료를 확인하세요.' : '새 소식과 자료를 한눈에 확인하세요.'}</p></div>
       ${isSuper() ? '<div class="h-hero-btns"><button class="btn primary" data-new="notice">＋ 공지 작성</button><button class="btn" data-new="page">＋ 자료 등록</button></div>' : ''}
     </section>
+
+    ${P ? `<section class="h-sec h-policy"><div class="h-box-head"><h3>📣 ${esc(P.title)} <small class="muted">${esc(P.period)}</small></h3>
+      <button class="link" data-polopen>💰 수익 계산해 보기 ›</button></div>${policyCardsHtml(P, true)}</section>` : ''}
 
     ${isOwner() && ownerPending ? `<button class="h-alert" data-go="myagency"><span class="t">👥 직원 가입 신청 <b>${ownerPending}건</b>이 승인을 기다리고 있습니다</span><span class="go">확인하기 ›</span></button>` : ''}
     ${pins.data.length ? `<section class="h-pins">${pins.data.map((n) => `<article class="h-pin" data-notice="${n.id}">
@@ -1312,6 +1381,11 @@ async function viewHome(main, { pendingCnt }) {
   main.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => go({ tab: 'library', libCat: Number(b.dataset.cat) }));
   main.querySelectorAll('[data-post]').forEach((b) => b.onclick = () => go({ tab: 'board', postId: Number(b.dataset.post) }));
   const ask = main.querySelector('[data-ask]'); if (ask) ask.onclick = () => go({ tab: 'board', compose: true });
+  if (P) {
+    bindPolicy(main.querySelector('.h-policy'), P);
+    main.querySelector('[data-polopen]').onclick = () => showPolicy(P);
+    if (!admin && !policySeen(P)) showPolicy(P);   // 대리점: 새 정책은 로그인 후 첫 화면에서 한 번 보여줌
+  }
   main.querySelectorAll('[data-new]').forEach((b) => b.onclick = () => {
     if (b.dataset.new === 'notice') return go({ tab: 'notices', noticeEdit: 'new' });
     const first = tops[0]; if (!first) return go({ tab: 'library' });
