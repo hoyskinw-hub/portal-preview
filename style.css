@@ -732,3 +732,16 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   .ct-sealhead { flex-direction: column; }
 }
 .ct-form input:not([type=file]), .ct-form select, .ct-form textarea { width: 100%; box-sizing: border-box; }
+
+/* 대리점 관리: 소속 사용자 */
+.ag-users { font: inherit; font-size: 13.5px; background: #f3f6fb; border: 1px solid #dfe5ee; border-radius: 8px; padding: 6px 10px; cursor: pointer; white-space: nowrap; }
+.ag-users:hover { border-color: #b9c8ea; } .ag-users[aria-expanded="true"] { background: #e7eefe; border-color: #b9c8ea; color: #1f4fd1; }
+.ag-users small { color: var(--muted); font-size: 12px; } .ag-noown { margin-left: 6px; }
+.ag-urow > td { background: #f8fafc; padding-top: 4px; padding-bottom: 14px; }
+.ag-utbl { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e3e8ef; border-radius: 10px; overflow: hidden; font-size: 13.5px; }
+.ag-utbl th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; background: #f3f5f8; padding: 8px 10px; }
+.ag-utbl td { padding: 8px 10px; border-top: 1px solid #eef1f5; vertical-align: middle; }
+.ag-utbl select { padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; font: inherit; }
+.ag-mail { font-family: inherit; color: #1f4fd1; word-break: break-all; }
+.ag-urow .hint { margin: 8px 2px 0; }
+.ag-utbl select.ag-role { width: auto; min-width: 84px; }

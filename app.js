@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=038a203';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=c8ed8d4';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -625,10 +625,21 @@ async function viewUsers(main) {
 
 // ---------------- 관리자: 대리점 관리 ----------------
 async function viewAgencies(main) {
-  const { data: users } = await sb.from('profiles').select('id,agency_code,status,role,contact_name,email').eq('status', 'approved');
+  const { data: users } = await sb.from('profiles').select('id,agency_code,status,role,agency_role,contact_name,email,phone,created_at').eq('status', 'approved');
   const mgrs = (users || []).filter((u) => u.role === 'manager');
   const mgrSel = (a) => `<select class="mg"><option value="">총관리자 직접</option>${mgrs.map((m) => `<option value="${m.id}" ${a.manager_id === m.id ? 'selected' : ''}>${esc(m.contact_name || m.email)}</option>`).join('')}</select>`;
-  const cnt = {}; (users || []).forEach((u) => { if (u.agency_code && u.role === 'agency') cnt[u.agency_code] = (cnt[u.agency_code] || 0) + 1; });
+  const byAg = {}; (users || []).forEach((u) => { if (u.agency_code && u.role === 'agency') (byAg[u.agency_code] ||= []).push(u); });
+  Object.values(byAg).forEach((l) => l.sort((a, b) => (a.agency_role === 'owner' ? 0 : 1) - (b.agency_role === 'owner' ? 0 : 1) || String(a.created_at).localeCompare(b.created_at)));
+  const userCell = (a) => {
+    const l = byAg[a.code] || [], own = l.filter((u) => u.agency_role === 'owner').length;
+    if (!l.length) return '<span class="muted">0명</span>';
+    return `<button type="button" class="ag-users" data-users="${esc(a.code)}" aria-expanded="${st.agOpen === a.code}">${l.length}명 <small>(대표 ${own} · 직원 ${l.length - own})</small> <span class="ag-caret">${st.agOpen === a.code ? '▴' : '▾'}</span></button>${own ? '' : '<span class="ct-st red ag-noown">대표 없음</span>'}`;
+  };
+  const userRows = (a) => `<tr class="ag-urow" ${st.agOpen === a.code ? '' : 'hidden'}><td></td><td colspan="4"><table class="ag-utbl"><thead><tr><th>이름</th><th>아이디 (이메일)</th><th>연락처</th><th>가입일</th><th>구분</th><th></th></tr></thead><tbody>
+      ${(byAg[a.code] || []).map((u) => `<tr data-u="${u.id}"><td><b>${esc(u.contact_name || '-')}</b></td><td class="ag-mail">${esc(u.email)}</td><td>${esc(u.phone || '-')}</td><td>${fmt(u.created_at).slice(0, 10)}</td>
+        <td><select class="ag-role"><option value="owner" ${u.agency_role === 'owner' ? 'selected' : ''}>대표</option><option value="staff" ${u.agency_role !== 'owner' ? 'selected' : ''}>직원</option></select></td>
+        <td style="text-align:right"><button class="btn small" data-urole="${u.id}" disabled>변경</button></td></tr>`).join('')}</tbody></table>
+      <p class="hint">대표는 계약·대리점 정보·직원 승인 메뉴를 쓰고, 전자계약에 날인할 수 있습니다. 직원은 공지·자료실·게시판만 씁니다.</p></td></tr>`;
   main.innerHTML = `
     <div class="bar"><h2>대리점 관리</h2><div class="grow"></div><span style="color:var(--muted);font-size:13px">${agencies.length}곳</span></div>
     <form class="card form-card" id="af" style="max-width:none;margin-bottom:16px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
@@ -636,9 +647,31 @@ async function viewAgencies(main) {
       <label class="field" style="margin:0;flex:1;min-width:200px"><span>대리점명</span><input type="text" name="name" required></label>
       <button class="btn primary">추가</button></form>
     <div class="card"><table class="tbl"><thead><tr><th style="width:110px">코드</th><th>대리점명</th><th>본사 담당자</th><th>사용자</th><th></th></tr></thead><tbody>
-      ${agencies.map((a) => `<tr data-c="${esc(a.code)}"><td>${esc(a.code)}</td><td><input type="text" class="nm" value="${esc(a.name)}"></td><td>${mgrSel(a)}</td><td>${cnt[a.code] || 0}명</td>
-        <td style="text-align:right;white-space:nowrap"><button class="btn small" data-act="save">저장</button> <button class="btn small danger" data-act="del">삭제</button></td></tr>`).join('')}
+      ${agencies.map((a) => `<tr data-c="${esc(a.code)}"><td>${esc(a.code)}</td><td><input type="text" class="nm" value="${esc(a.name)}"></td><td>${mgrSel(a)}</td><td>${userCell(a)}</td>
+        <td style="text-align:right;white-space:nowrap"><button class="btn small" data-act="save">저장</button> <button class="btn small danger" data-act="del">삭제</button></td></tr>${userRows(a)}`).join('')}
     </tbody></table></div>`;
+  main.querySelectorAll('[data-users]').forEach((b) => b.onclick = () => {
+    const open = st.agOpen !== b.dataset.users; st.agOpen = open ? b.dataset.users : null;
+    main.querySelectorAll('.ag-urow').forEach((r) => { r.hidden = true; });
+    main.querySelectorAll('[data-users]').forEach((x) => { x.setAttribute('aria-expanded', 'false'); x.querySelector('.ag-caret').textContent = '▾'; });
+    if (open) { b.closest('tr').nextElementSibling.hidden = false; b.setAttribute('aria-expanded', 'true'); b.querySelector('.ag-caret').textContent = '▴'; }
+  });
+  main.querySelectorAll('.ag-role').forEach((sel) => sel.onchange = () => {
+    const btn = sel.closest('tr').querySelector('[data-urole]'); const u = (users || []).find((x) => x.id === btn.dataset.urole);
+    btn.disabled = sel.value === (u.agency_role === 'owner' ? 'owner' : 'staff'); btn.classList.toggle('primary', !btn.disabled);
+  });
+  main.querySelectorAll('[data-urole]').forEach((b) => b.onclick = async () => {
+    const u = (users || []).find((x) => x.id === b.dataset.urole), role = b.closest('tr').querySelector('.ag-role').value;
+    const nm = u.contact_name || u.email, ag = agencyName(u.agency_code);
+    const others = (byAg[u.agency_code] || []).filter((x) => x.id !== u.id && x.agency_role === 'owner');
+    const msg = role === 'owner'
+      ? `${nm}(${u.email})님을 ${ag}의 대표로 바꿀까요?\n계약·대리점 정보·직원 승인 메뉴를 쓰고 전자계약에 날인할 수 있게 됩니다.${others.length ? `\n\n※ 이미 대표 ${others.map((x) => x.contact_name || x.email).join(', ')}님이 있습니다. 대표가 여러 명이 됩니다.` : ''}`
+      : `${nm}(${u.email})님을 직원으로 바꿀까요?\n계약·대리점 정보 메뉴와 전자계약 날인 권한이 사라집니다.${others.length ? '' : `\n\n※ 바꾸면 ${ag}에 대표가 없게 됩니다.`}`;
+    if (!confirm(msg)) return;
+    const { error } = await sb.from('profiles').update({ agency_role: role }).eq('id', u.id);
+    if (error) return fail(error);
+    toast(`${nm}님을 ${role === 'owner' ? '대표' : '직원'}로 바꿨습니다.`); render();
+  });
   main.querySelector('#af').onsubmit = async (e) => {
     e.preventDefault(); const v = form(e.target);
     const { error } = await sb.from('agencies').insert({ code: v.code.trim(), name: v.name.trim() });
@@ -1735,7 +1768,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=038a203'), import('./docfill.js?v=038a203'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=c8ed8d4'), import('./docfill.js?v=c8ed8d4'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1881,7 +1914,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=038a203')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=c8ed8d4')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부의 첫 장에 걸쳐</span><span><b>간인</b> 쪽과 쪽 사이에 걸쳐</span></div>
@@ -2375,7 +2408,7 @@ async function cleanSeal(file) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=038a203');
+  const V = await import('./viewer.js?v=c8ed8d4');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
