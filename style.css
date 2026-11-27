@@ -903,3 +903,27 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   .tbl select { min-width: 150px; }
   .tbl th, .tbl td { padding: 9px 10px; }
 }
+
+/* ---------- 모바일: 하단 [더보기], 홈 카드, 누르기 쉬운 크기 (640px 이하) ---------- */
+.bn-sheet { display: none; }
+@media (max-width: 640px) {
+  .agency-ui .bn-sheet:not([hidden]) { display: grid; position: fixed; left: 10px; right: 10px; bottom: calc(70px + env(safe-area-inset-bottom)); z-index: 21;
+    background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px rgba(16,24,40,.18); padding: 6px; gap: 2px; }
+  .bn-sheet button { display: flex; align-items: center; gap: 10px; border: 0; background: none; padding: 13px 12px; border-radius: 10px; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; }
+  .bn-sheet button.on { background: var(--brand-soft); color: var(--brand); }
+  .bn-sheet .cnt { margin-left: auto; }
+  .bnav button { font-size: 11.5px; }
+  /* 홈: 정책 카드 2열, 자료 제목 2줄까지 */
+  .pol-cards, .pol .pol-cards { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
+  .pol-big { font-size: 19px !important; }
+  .pc-t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .h-box-head { flex-wrap: wrap; row-gap: 4px; }
+  /* 작은 글씨·버튼 키우기 */
+  .h-box-head .link, .link { padding: 8px 4px; min-height: 36px; }
+  .mn-all .link { padding: 8px 6px; }
+  .hint, small { font-size: max(12px, .85em); }
+  .role-chip, .badge { white-space: nowrap; }
+  /* 가입 신청 구분 버튼: 글자가 끊기지 않게 세로로 */
+  .seg { flex-direction: column; }
+  .seg label { justify-content: flex-start; padding: 11px 12px; }
+}

@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=19da20e';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=564ec03';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -323,7 +323,16 @@ async function render() {
       `<button class="hq-item ${st.tab === k ? 'on' : ''}" data-tab="${k}"><span class="hq-ic">${ic}</span>${l}${c ? `<span class="cnt">${c}</span>` : ''}</button>`).join('')}</div></nav>` : ''}
     </header>
     <main id="main"></main>
-    ${!isAdmin() && tabs.length > 1 ? `<nav class="bnav" style="--n:${tabs.length}">${tabs.map(([k, l, c]) => `<button class="${st.tab === k ? 'on' : ''}" data-tab="${k}"><span class="bi">${ICON[k]}${c ? `<i>${c}</i>` : ''}</span>${l}</button>`).join('')}</nav>` : ''}`;
+    ${!isAdmin() && tabs.length > 1 ? (() => {
+      // 모바일 하단 메뉴: 5개가 넘으면 자주 쓰는 4개 + [더보기]
+      const PRI = ['home', 'board', 'contracts', 'notices', 'library', 'faq', 'myagency'];
+      const main4 = tabs.length > 5 ? PRI.map((k) => tabs.find((t) => t[0] === k)).filter(Boolean).slice(0, 4) : tabs;
+      const more = tabs.filter((t) => !main4.includes(t)), moreCnt = more.reduce((a, t) => a + (t[2] || 0), 0);
+      const btn = ([k, l, c]) => `<button class="${st.tab === k ? 'on' : ''}" data-tab="${k}"><span class="bi">${ICON[k]}${c ? `<i>${c}</i>` : ''}</span>${l}</button>`;
+      return `<nav class="bnav" style="--n:${main4.length + (more.length ? 1 : 0)}">${main4.map(btn).join('')}
+        ${more.length ? `<button class="${more.some((t) => t[0] === st.tab) ? 'on' : ''}" id="bnMore" aria-expanded="false"><span class="bi">☰${moreCnt ? `<i>${moreCnt}</i>` : ''}</span>더보기</button>` : ''}</nav>
+        ${more.length ? `<div class="bn-sheet" id="bnSheet" hidden>${more.map(([k, l, c]) => `<button class="${st.tab === k ? 'on' : ''}" data-tab="${k}"><span>${ICON[k]}</span>${l}${c ? `<span class="cnt">${c}</span>` : ''}</button>`).join('')}</div>` : ''}`;
+    })() : ''}`;
   app.classList.toggle('agency-ui', !isAdmin());
   app.querySelector('#logout').onclick = logout;
   if (app.querySelector('#gs')) app.querySelector('#gs').onsubmit = (e) => {
@@ -337,6 +346,9 @@ async function render() {
     window.scrollTo(0, 0); render();
   };
   app.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { if (!b.classList.contains('hq-item')) st.hqOpen = false; goTab(b.dataset.tab); });
+  const bnMore = app.querySelector('#bnMore'), bnSheet = app.querySelector('#bnSheet');
+  if (bnMore) bnMore.onclick = (e) => { e.stopPropagation(); bnSheet.hidden = !bnSheet.hidden; bnMore.setAttribute('aria-expanded', String(!bnSheet.hidden)); };
+  if (bnSheet) app.onclick = (e) => { if (!bnSheet.hidden && !bnSheet.contains(e.target) && e.target !== bnMore) { bnSheet.hidden = true; bnMore.setAttribute('aria-expanded', 'false'); } };
   const hqBtn = app.querySelector('#hqBtn');
   if (hqBtn) hqBtn.onclick = () => {
     const sub = app.querySelector('#hqSub'), open = sub.hidden;
@@ -437,7 +449,7 @@ async function viewBoard(main) {
   const { data: posts, error } = await q; if (error) throw error;
   const reads = await readMap(posts.map((p) => p.id));
   main.innerHTML = `
-    <div class="bar">${isAdmin() ? agencySelect() : `<h2>${esc(agencyName(st.agency))}</h2>`}
+    <div class="bar">${isAdmin() ? agencySelect() : `<h2>💬 1:1 문의 <small class="muted">${esc(agencyName(st.agency))}</small></h2>`}
       <div class="chips">${[['all', '전체'], ['notice', '공지'], ['file', '자료'], ['question', '문의']].map(([k, l]) => `<button class="chip ${st.filter === k ? 'on' : ''}" data-f="${k}">${l}</button>`).join('')}</div>
       ${searchBox('제목·내용 검색')}
       <div class="grow"></div><button class="btn primary" id="new">${isAdmin() ? '새 글 · 자료 올리기' : '문의하기'}</button></div>
@@ -1939,7 +1951,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=19da20e'), import('./docfill.js?v=19da20e'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=564ec03'), import('./docfill.js?v=564ec03'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2090,7 +2102,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=19da20e')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=564ec03')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2730,7 +2742,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=19da20e');
+  const V = await import('./viewer.js?v=564ec03');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2872,7 +2884,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=19da20e');
+    const V = await import('./viewer.js?v=564ec03');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
@@ -2936,8 +2948,8 @@ async function ctListAgency(main) {
   const todo = list.filter((c) => c.status === 'sent'), rest = list.filter((c) => c.status !== 'sent');
   main.innerHTML = `<div class="ct">
     <div class="lib-head"><h2>전자계약</h2><p class="muted">본사가 보낸 특약서 등을 확인하고, 등록한 날인 이미지로 온라인 날인합니다.</p></div>
-    <section class="card ct-sealcard">${ctSealCard(seal)}</section>
     ${todo.length ? `<h3 class="section-title">날인할 계약 ${todo.length}건</h3>${ctRows(todo)}` : ''}
+    <section class="card ct-sealcard">${ctSealCard(seal)}</section>
     <h3 class="section-title">계약 내역</h3>${ctRows(rest)}
   </div>`;
   bindCtRows(main); bindSealCard(main, seal);
@@ -3054,7 +3066,8 @@ async function ctDetailView(main) {
           ${c.memo ? `<div class="ct-memo">${esc(c.memo)}</div>` : ''}
           ${c.status === 'rejected' && c.reject_reason ? `<div class="ct-warn"><b>수정 요청</b><br>${esc(c.reject_reason)}</div>` : ''}
           ${step >= 0 ? `<ol class="ct-steps h">${['본사 작성', '대리점 날인', '본사 날인', '체결 완료'].map((l, i) => `<li class="${i < step || step === 3 ? 'done' : i === step ? 'now' : ''}">${l}</li>`).join('')}</ol>
-            <p class="ct-stepnow muted">${['', '지금 단계: 대리점 대표자의 동의·날인을 기다리는 중', '지금 단계: 본사가 출력해 실물 날인 후 날인본을 올릴 차례', ''][step] || ''}</p>` : ''}
+            <p class="ct-stepnow muted">${(isAdmin() ? ['', '지금 단계: 대리점 대표자의 동의·날인을 기다리는 중', '지금 단계: 본사가 출력해 실물 날인 후 날인본을 올릴 차례', '']
+              : ['', '지금 할 일: 계약서를 확인한 뒤 아래 [동의 및 날인]에서 날인해 주세요', '날인을 마쳤습니다. 본사가 출력해 날인하면 체결이 완료됩니다', ''])[step] || ''}</p>` : ''}
           ${c.marks?.length ? `<p class="ct-stepnow muted">대리점 날인: ${esc(ctMarkSummary(c.marks))}</p>` : ''}
           <div class="ct-files">
             <button class="btn small" data-dl="src">원본 PDF</button>
@@ -3143,7 +3156,7 @@ function ctAgencyActions(act, c, seal, canSign) {
       <div class="ct-btns"><button class="btn" id="aReject">수정 요청</button></div>`;
   } else {
     act.innerHTML = `<h4>동의 및 날인</h4>
-      <p class="hint">오른쪽 문서의 표시된 자리에 등록한 날인 이미지가 찍힙니다. 끝까지 읽고 진행해 주세요.</p>
+      <p class="hint">문서에 표시된 자리에 등록한 날인 이미지가 찍힙니다. 끝까지 읽고 진행해 주세요.</p>
       <form id="signF">
         <label class="ct-agree"><input type="checkbox" name="agree" required> 계약서 내용을 모두 확인했으며, 등록한 날인 이미지로 날인하는 데 동의합니다.</label>
         <label class="field"><span>본인 확인 — 파트너센터 비밀번호</span><input type="password" name="pw" required autocomplete="current-password"></label>
