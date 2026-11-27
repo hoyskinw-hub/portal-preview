@@ -886,7 +886,8 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   .top-in { padding: 10px 14px 8px; gap: 4px 8px; }
   .top-in .brand { font-size: 16px; }
   .who { width: auto; margin-left: auto; gap: 6px; font-size: 12.5px; }
-  .gsearch { margin-top: 4px; }
+  .who { order: 2; }
+  .gsearch { order: 3; flex: 1 0 100%; margin: 4px 0 0; }
   /* 2. 상단 메뉴: [본사 관리] 버튼이 화면 밖으로 나가지 않게 */
   .tabs { padding: 0 8px; gap: 0; }
   .tabs .tab { padding-left: 10px; padding-right: 10px; flex-shrink: 0; }
