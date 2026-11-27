@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=de79fea';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=038a203';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -25,7 +25,7 @@ document.title = cfg.SITE_TITLE || document.title;
 let me = null;            // 내 profile
 let agencies = [];        // 관리자: 전체 / 대리점: 자기 것
 const ST0 = { tab: 'home', agency: null, filter: 'all', postId: null, compose: false,
-             q: '', gq: '', obId: null, obEdit: null, obFilter: 'active', faqCat: '전체', faqQ: '', faqOpen: null, noticeId: null, noticeEdit: null, libCat: null, libPage: null, libEdit: null, libQ: '' };
+             q: '', gq: '', obId: null, obEdit: null, obFilter: 'active', faqCat: '전체', faqQ: '', faqOpen: null, noticeId: null, noticeEdit: null, libCat: null, libPage: null, libEdit: null, libQ: '', ctId: null, ctEdit: null, ctFilter: 'todo' };
 const st = { ...ST0 };
 // 로그인/로그아웃 때 보던 화면을 모두 지우고 첫 화면(공지사항)부터
 function resetAll() { Object.assign(st, ST0); booted = false; me = null; libOpen.clear(); window.scrollTo(0, 0); }
@@ -214,11 +214,11 @@ function renderWait(msg) {
 }
 
 function resetView() {
-  Object.assign(st, { postId: null, compose: false, noticeId: null, noticeEdit: null, libEdit: null, obId: null, obEdit: null });
+  Object.assign(st, { postId: null, compose: false, noticeId: null, noticeEdit: null, libEdit: null, obId: null, obEdit: null, ctId: null, ctEdit: null });
 }
 
 // ---------------- 브라우저 뒤로가기: 사이트 안에서 이전 화면으로 ----------------
-const NAV_KEYS = ['tab', 'agency', 'filter', 'postId', 'compose', 'q', 'obId', 'obEdit', 'obFilter', 'faqCat', 'noticeId', 'noticeEdit', 'libCat', 'libPage', 'libEdit'];
+const NAV_KEYS = ['tab', 'agency', 'filter', 'postId', 'compose', 'q', 'obId', 'obEdit', 'obFilter', 'faqCat', 'noticeId', 'noticeEdit', 'libCat', 'libPage', 'libEdit', 'ctId', 'ctEdit'];
 const navSnap = () => JSON.stringify(NAV_KEYS.map((k) => st[k] ?? null));
 let navFromPop = false;
 function syncHistory() {
@@ -226,14 +226,14 @@ function syncHistory() {
   const snap = navSnap(), cur = history.state?.nav;
   if (cur === snap) return;
   // 작성 화면에서 저장하고 나올 때는 작성 화면을 기록에서 지워, 뒤로가기로 다시 열리지 않게
-  const EDIT = ['compose', 'noticeEdit', 'libEdit', 'obEdit'].map((k) => NAV_KEYS.indexOf(k));
+  const EDIT = ['compose', 'noticeEdit', 'libEdit', 'obEdit', 'ctEdit'].map((k) => NAV_KEYS.indexOf(k));
   const wasEdit = cur && EDIT.some((i) => JSON.parse(cur)[i]), isEdit = EDIT.some((i) => JSON.parse(snap)[i]);
   if (!cur || (wasEdit && !isEdit)) history.replaceState({ nav: snap }, ''); else history.pushState({ nav: snap }, '');
 }
 window.addEventListener('popstate', (e) => {
   if (!me) return;
   const open = document.querySelectorAll('.modal-bg, .lightbox');
-  const editing = st.compose || st.noticeEdit || st.libEdit || st.obEdit;
+  const editing = st.compose || st.noticeEdit || st.libEdit || st.obEdit || st.ctEdit;
   if (editing && !open.length && !confirm('작성 중인 내용은 저장되지 않습니다. 이전 화면으로 갈까요?')) { history.pushState({ nav: navSnap() }, ''); return; }
   open.forEach((x) => x.remove());
   const nav = e.state?.nav;
@@ -259,12 +259,18 @@ async function render() {
     .gt('created_at', safeLS.get(seenKey) || '1970-01-01');
   let obPending = 0;
   if (isAdmin()) { const { count } = await sb.from('onboard_apps').select('id', { count: 'exact', head: true }).eq('status', 'submitted'); obPending = count || 0; }
+  // 전자계약: 본사 = 본사 날인 대기 수 / 대표자 = 날인할 계약 수
+  let ctCnt = 0;
+  if (isAdmin() || isOwner()) {
+    const { count } = await sb.from('contracts').select('id', { count: 'exact', head: true }).eq('status', isAdmin() ? 'agency_signed' : 'sent');
+    ctCnt = count || 0;
+  }
   const tabs = isProspect() ? [['onboard', '대리점 개설 신청']] : isAdmin()
     ? [['home', '홈'], ['notices', '공지사항'], ['library', '자료실'], ['faq', 'FAQ'], ['inbox', '최근 문의'], ['board', '대리점별 게시판'], ['files', '대리점 자료함'],
-       ['onboarding', '개설 신청', obPending], ['users', '가입 승인', pendingCnt], ['agencies', '대리점 관리']].filter(([k]) => isSuper() || k !== 'agencies')
+       ['onboarding', '개설 신청', obPending], ['contracts', '전자계약', ctCnt], ['users', '가입 승인', pendingCnt], ['agencies', '대리점 관리']].filter(([k]) => isSuper() || k !== 'agencies')
     : [['home', '홈'], ['notices', '공지사항', newNotice], ['library', '자료실'], ['faq', 'FAQ'], ['board', '1:1 문의'],
-       ['myagency', '우리 대리점', memberPending]].filter(([k]) => isOwner() || !OWNER_ONLY.has(k));
-  const ICON = { home: '🏠', notices: '📢', library: '📚', faq: '❓', board: '💬', myagency: '🏢' };
+       ['contracts', '전자계약', ctCnt], ['myagency', '우리 대리점', memberPending]].filter(([k]) => isOwner() || !OWNER_ONLY.has(k));
+  const ICON = { home: '🏠', notices: '📢', library: '📚', faq: '❓', board: '💬', myagency: '🏢', contracts: '✍️' };
   if (!isAdmin() && !tabs.some(([k]) => k === st.tab) && !(st.tab === 'search' && !isProspect())) st.tab = tabs[0][0];
   const whoName = isProspect() ? `<b>${esc(me.requested_name || '신규 대리점')}</b> · ${esc(me.contact_name || me.email)} <span class="role-chip">신규 대리점</span>` : isAdmin() ? `${esc(me.contact_name || me.email)} <span class="role-chip owner">${isSuper() ? '총관리자' : '본사 담당자'}</span>` : `<b>${esc(agencyName(me.agency_code))}</b> · ${esc(me.contact_name || me.email)} <span class="role-chip ${me.agency_role}">${ROLE_LABEL[me.agency_role] || '직원'}</span>`;
   app.innerHTML = `
@@ -299,6 +305,7 @@ async function render() {
     if (st.tab === 'faq') return await viewFaq(main);
     if (st.tab === 'onboard') return isProspect() ? await viewOnboard(main) : null;
     if (st.tab === 'onboarding') return isAdmin() ? await viewOnboardAdmin(main) : null;
+    if (st.tab === 'contracts') return (isAdmin() || isOwner()) ? await viewContracts(main) : null;
     if (st.tab === 'myagency') return isOwner() ? await viewMyAgency(main) : viewHome(main, { pendingCnt });
     if (st.tab === 'search') return await viewSearch(main);
     if (st.tab === 'notices') return await viewNotices(main);
@@ -1728,7 +1735,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=de79fea'), import('./docfill.js?v=de79fea'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=038a203'), import('./docfill.js?v=038a203'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1874,7 +1881,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=de79fea')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=038a203')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부의 첫 장에 걸쳐</span><span><b>간인</b> 쪽과 쪽 사이에 걸쳐</span></div>
@@ -2319,4 +2326,494 @@ async function viewOnboardDetail(main) {
       const { error: e } = await sb.rpc('issue_agency_code', { aid: app.id, acode: v.code.trim(), aname: v.name.trim() }); if (e) throw e;
       toast(`코드 ${v.code.trim()} 를 발급했습니다.`); boot();
     }, '코드 발급');
+}
+
+// =====================================================================
+//  전자계약 (특약서) — 대리점: 등록한 날인 이미지로 온라인 날인 / 본사: 출력본에 실물 날인
+// =====================================================================
+const CT_ST = { draft: ['작성 중', 'gray'], sent: ['대리점 날인 대기', 'blue'], agency_signed: ['본사 날인 대기', 'orange'],
+  completed: ['체결 완료', 'green'], rejected: ['수정 요청', 'red'], cancelled: ['취소', 'gray'] };
+const CT_EV = { created: '계약서 작성', sent: '대리점에 날인 요청', viewed: '대리점 열람', signed: '대리점 동의·날인', rejected: '대리점 수정 요청',
+  recalled: '본사 회수', completed: '본사 날인 · 체결 완료', cancelled: '계약 취소', resent: '수정 후 다시 요청' };
+const SEAL_KINDS = ['사용인감', '법인인감', '대표자 도장', '대표자 서명'];
+const SEAL_ST = { pending: ['승인 대기', 'orange'], approved: ['사용 가능', 'green'], rejected: ['반려', 'red'] };
+const ctBadge = (s) => `<span class="ct-st ${CT_ST[s]?.[1] || 'gray'}">${CT_ST[s]?.[0] || s}</span>`;
+const ctNo = (id) => `C-${String(id).padStart(5, '0')}`;
+async function sha256(buf) {
+  const h = await crypto.subtle.digest('SHA-256', buf instanceof ArrayBuffer ? buf : buf.buffer ? buf : await buf.arrayBuffer());
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function getBytes(path) {
+  const { data, error } = await sb.storage.from(BUCKET).download(path);
+  if (error) throw new Error('파일을 불러오지 못했습니다.');
+  return new Uint8Array(await data.arrayBuffer());
+}
+const myName = () => me.contact_name || me.email;
+
+// 도장 사진 → 흰 배경 제거 + 여백 자르기 (PNG)
+async function cleanSeal(file) {
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('이미지를 열 수 없습니다.')); i.src = URL.createObjectURL(file); });
+  const k = Math.min(1, 900 / Math.max(img.width, img.height)), W = Math.round(img.width * k), H = Math.round(img.height * k);
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0, W, H);
+  const d = g.getImageData(0, 0, W, H), p = d.data; let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let i = 0; i < p.length; i += 4) {
+    const r = p[i], gg = p[i + 1], b = p[i + 2], light = (r + gg + b) / 3, sat = Math.max(r, gg, b) - Math.min(r, gg, b);
+    let a = 255;
+    if (light > 210 && sat < 45) a = 0;                                   // 흰 종이
+    else if (light > 170 && sat < 30) a = Math.round(((210 - light) / 40) * 255); // 옅은 그림자
+    p[i + 3] = Math.min(p[i + 3], a);
+    if (p[i + 3] > 60) { const px = (i / 4) % W, py = Math.floor(i / 4 / W); if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py; }
+  }
+  g.putImageData(d, 0, 0);
+  if (x1 < 0) throw new Error('도장 모양을 찾지 못했습니다. 흰 종이에 찍은 도장을 밝은 곳에서 찍어 주세요.');
+  const pad = 6, w = x1 - x0 + 1, h = y1 - y0 + 1, out = document.createElement('canvas');
+  out.width = w + pad * 2; out.height = h + pad * 2;
+  out.getContext('2d').drawImage(c, x0, y0, w, h, pad, pad, w, h);
+  return new Promise((res) => out.toBlob(res, 'image/png'));
+}
+
+// PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
+async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
+  const V = await import('./viewer.js?v=038a203');
+  const doc = await V.loadPdfBytes(bytes.slice());
+  box.innerHTML = '';
+  const width = Math.min(760, box.clientWidth || 760);
+  const sizes = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const wrap = document.createElement('div'); wrap.className = 'ct-pg';
+    const cv = document.createElement('canvas'); wrap.appendChild(cv);
+    const lab = document.createElement('div'); lab.className = 'ct-pgno'; lab.textContent = `${n} / ${doc.numPages}쪽`; wrap.appendChild(lab);
+    box.appendChild(wrap);
+    const sz = await V.renderPdfPage(doc, n, cv, width); sizes[n] = sz;
+    const s = width / sz.w;
+    marks.forEach((m, i) => {
+      if (m.p !== n) return;
+      const el = document.createElement('div'); el.className = 'ct-mark' + (sealUrl ? ' seal' : '');
+      Object.assign(el.style, { left: `${(m.x - m.w / 2) * s}px`, top: `${(sz.h - m.y - m.w / 2) * s}px`, width: `${m.w * s}px`, height: `${m.w * s}px` });
+      el.innerHTML = sealUrl ? `<img src="${esc(sealUrl)}" alt="">` : '<span>대리점<br>날인</span>';
+      if (onMarkClick) el.onclick = (e) => { e.stopPropagation(); onMarkClick(i); };
+      wrap.appendChild(el);
+    });
+    if (onPageClick) wrap.onclick = (e) => {
+      const r = cv.getBoundingClientRect();
+      onPageClick({ p: n, x: Math.round((e.clientX - r.left) / s), y: Math.round(sz.h - (e.clientY - r.top) / s) });
+    };
+  }
+  return { pages: doc.numPages, sizes };
+}
+
+async function viewContracts(main) {
+  if (isAdmin() && st.ctEdit) return ctEditView(main);
+  if (st.ctId) return ctDetailView(main);
+  return isAdmin() ? ctListHq(main) : ctListAgency(main);
+}
+
+function ctRows(list) {
+  if (!list.length) return '<div class="empty">계약이 없습니다.</div>';
+  return `<div class="ct-list">${list.map((c) => `<button class="ct-row" data-ct="${c.id}">
+    <div class="ct-r1">${ctBadge(c.status)}<b>${esc(c.title)}</b></div>
+    <div class="ct-r2 muted">${ctNo(c.id)} · ${esc(c.kind)}${isAdmin() ? ` · ${esc(c.agency_code)} ${esc(agencyName(c.agency_code))}` : ''} · ${fmt(c.updated_at).slice(0, 10)}</div></button>`).join('')}</div>`;
+}
+function bindCtRows(root) { root.querySelectorAll('[data-ct]').forEach((b) => b.onclick = () => { st.ctId = Number(b.dataset.ct); window.scrollTo(0, 0); render(); }); }
+
+// ---------- 본사: 목록 + 날인 이미지 승인 ----------
+async function ctListHq(main) {
+  const [{ data: list, error }, { data: seals }] = await Promise.all([
+    sb.from('contracts').select('id,agency_code,title,kind,status,updated_at').order('updated_at', { ascending: false }),
+    sb.from('agency_seals').select('*').order('registered_at', { ascending: false })]);
+  if (error) throw error;
+  const f = st.ctFilter || 'todo';
+  const groups = { todo: (c) => ['agency_signed', 'rejected', 'draft'].includes(c.status), sent: (c) => c.status === 'sent',
+    done: (c) => c.status === 'completed', all: () => true };
+  const shown = list.filter(groups[f]);
+  const cnt = (k) => list.filter(groups[k]).length;
+  const pend = (seals || []).filter((s) => s.status === 'pending');
+  main.innerHTML = `<div class="ct">
+    <div class="lib-head"><h2>전자계약</h2><button class="btn primary" id="ctNew">+ 새 계약 (PDF 올리기)</button>
+      <p class="muted">대리점은 등록한 날인 이미지로 온라인 날인하고, 본사는 날인본을 출력해 실물 도장을 찍은 뒤 스캔본을 올리면 체결이 끝납니다.</p></div>
+    ${pend.length ? `<section class="card ct-sealq"><h3>날인 이미지 승인 대기 ${pend.length}건</h3>
+      <p class="hint">대리점에서 우편으로 보낸 <b>전자날인 사용 동의서</b> 원본(법인인감 날인·인감증명서 첨부)을 받은 뒤 승인하세요.</p>
+      <div class="ct-seals">${pend.map((s) => `<div class="ct-seal" data-seal="${esc(s.agency_code)}"><div class="ct-sealimg"><img data-src="${esc(s.image_path)}" alt=""></div>
+        <div><b>${esc(s.agency_code)} ${esc(agencyName(s.agency_code))}</b><div class="muted">${esc(s.kind)} · ${esc(s.registered_name || '')} · ${fmt(s.registered_at)}</div>
+        <div class="ct-btns"><button class="btn small primary" data-sok="${esc(s.agency_code)}">동의서 받음 · 승인</button><button class="btn small" data-sno="${esc(s.agency_code)}">반려</button></div></div></div>`).join('')}</div></section>` : ''}
+    <div class="chips ct-chips">${[['todo', '처리할 일'], ['sent', '대리점 날인 대기'], ['done', '체결 완료'], ['all', '전체']].map(([k, l]) =>
+      `<button class="chip ${f === k ? 'on' : ''}" data-cf="${k}">${l} ${cnt(k)}</button>`).join('')}</div>
+    ${ctRows(shown)}
+    ${(seals || []).some((s) => s.status !== 'pending') ? `<details class="ct-allseals"><summary>등록된 날인 이미지 전체 보기</summary><div class="ct-seals">${(seals || []).filter((s) => s.status !== 'pending').map((s) =>
+      `<div class="ct-seal"><div class="ct-sealimg"><img data-src="${esc(s.image_path)}" alt=""></div><div><b>${esc(s.agency_code)} ${esc(agencyName(s.agency_code))}</b>
+      <div class="muted">${esc(s.kind)} · <span class="ct-st ${SEAL_ST[s.status][1]}">${SEAL_ST[s.status][0]}</span>${s.approved_at ? ` · 승인 ${fmt(s.approved_at).slice(0, 10)} ${esc(s.approved_by || '')}` : ''}</div></div></div>`).join('')}</div></details>` : ''}
+  </div>`;
+  main.querySelectorAll('img[data-src]').forEach(async (im) => { im.src = await signedUrl(im.dataset.src); });
+  main.querySelector('#ctNew').onclick = () => { st.ctEdit = 'new'; render(); };
+  main.querySelectorAll('[data-cf]').forEach((b) => b.onclick = () => { st.ctFilter = b.dataset.cf; render(); });
+  bindCtRows(main);
+  main.querySelectorAll('[data-sok]').forEach((b) => b.onclick = async () => {
+    if (!confirm(`${agencyName(b.dataset.sok)}의 동의서 원본을 받으셨나요?\n승인하면 이 이미지로 전자계약 날인이 가능해집니다.`)) return;
+    const now = new Date().toISOString();
+    const { error: e } = await sb.from('agency_seals').update({ status: 'approved', consent_at: now, approved_at: now, approved_by: myName(), note: null }).eq('agency_code', b.dataset.sok);
+    if (e) return fail(e); toast('승인했습니다.'); render();
+  });
+  main.querySelectorAll('[data-sno]').forEach((b) => b.onclick = () => modal('날인 이미지 반려', '<label class="field"><span>사유 (대리점에 표시)</span><textarea name="note" rows="3" required placeholder="예) 도장이 흐려서 다시 찍어 올려 주세요."></textarea></label>', async (v) => {
+    const { error: e } = await sb.from('agency_seals').update({ status: 'rejected', note: v.note }).eq('agency_code', b.dataset.sno);
+    if (e) throw e; toast('반려했습니다.'); render();
+  }, '반려'));
+}
+
+// ---------- 본사: 계약 작성·수정 (PDF + 날인 위치) ----------
+async function ctEditView(main) {
+  let c = null;
+  if (st.ctEdit !== 'new') {
+    const { data } = await sb.from('contracts').select('*').eq('id', st.ctEdit).maybeSingle(); c = data;
+    if (!c || !['draft', 'rejected', 'sent'].includes(c.status)) { st.ctEdit = null; return render(); }
+  }
+  const mine = agencies;
+  let bytes = c ? await getBytes(c.src_path) : null, newFile = null, marks = c ? [...c.marks] : [];
+  main.innerHTML = `<div class="ct">
+    <div class="crumbs"><a href="#" id="ctBack">전자계약</a> › <span>${c ? `${ctNo(c.id)} 수정` : '새 계약'}</span></div>
+    <div class="ct-edit">
+      <form class="card ct-form" id="ctf">
+        <label class="field"><span>대리점</span>${c ? `<input value="${esc(c.agency_code)} ${esc(agencyName(c.agency_code))}" disabled>` :
+          `<select name="agency_code" required><option value="">선택하세요</option>${mine.map((a) => `<option value="${esc(a.code)}">${esc(a.code)} · ${esc(a.name)}</option>`).join('')}</select>`}</label>
+        <label class="field"><span>종류</span><select name="kind">${['특약서', '변경 합의서', '부속 합의서', '기타'].map((k) => `<option ${c?.kind === k ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
+        <label class="field"><span>계약명</span><input name="title" required maxlength="120" value="${esc(c?.title || '')}" placeholder="예) 2027년 수수료 특약서"></label>
+        <label class="field"><span>대리점 안내 문구 (선택)</span><textarea name="memo" rows="3" placeholder="예) 12월 정산부터 적용되는 특약입니다.">${esc(c?.memo || '')}</textarea></label>
+        <label class="field"><span>계약서 PDF ${c ? '(바꿀 때만)' : ''}</span><input type="file" id="ctFile" accept="application/pdf,.pdf" ${c ? '' : 'required'}></label>
+        <div class="ct-markinfo"><b>대리점 날인 위치 <span id="mkCnt">${marks.length}</span>곳</b>
+          <p class="hint">오른쪽 문서에서 대리점 도장이 찍힐 자리(“(인)” 위 등)를 누르세요. 표시를 다시 누르면 지워집니다.</p>
+          <label class="field inline"><span>도장 크기</span><select id="mkSize">${[[42, '작게 (1.5cm)'], [57, '보통 (2cm)'], [71, '크게 (2.5cm)']].map(([v, l]) => `<option value="${v}" ${v === 57 ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+        ${c?.status === 'rejected' && c.reject_reason ? `<div class="ct-warn"><b>대리점 수정 요청</b><br>${esc(c.reject_reason)}</div>` : ''}
+        <div class="ct-btns"><button type="button" class="btn" id="ctSave">임시 저장</button><button class="btn primary" id="ctSend">대리점에 날인 요청</button></div>
+      </form>
+      <div class="ct-doc" id="ctDoc">${bytes ? '' : '<div class="empty">계약서 PDF를 선택하면 여기에 표시됩니다.</div>'}</div>
+    </div></div>`;
+  const docBox = main.querySelector('#ctDoc'), f = main.querySelector('#ctf');
+  main.querySelector('#ctBack').onclick = (e) => { e.preventDefault(); st.ctEdit = null; render(); };
+  const redraw = async () => {
+    main.querySelector('#mkCnt').textContent = marks.length;
+    if (!bytes) return;
+    const y = window.scrollY;
+    await ctRenderPages(docBox, bytes, marks, {
+      onPageClick: (pt) => { const w = Number(main.querySelector('#mkSize').value); marks.push({ ...pt, w }); redraw(); },
+      onMarkClick: (i) => { marks.splice(i, 1); redraw(); } });
+    window.scrollTo(0, y);
+  };
+  main.querySelector('#ctFile').onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    if (!PDF_EXT.test(file.name)) { toast('PDF 파일만 올릴 수 있습니다.', true); e.target.value = ''; return; }
+    newFile = file; bytes = new Uint8Array(await file.arrayBuffer()); marks = []; redraw();
+  };
+  await redraw();
+  const save = async (send) => {
+    const v = form(f);
+    if (!c && !v.agency_code) throw new Error('대리점을 선택하세요.');
+    if (!v.title.trim()) throw new Error('계약명을 입력하세요.');
+    if (!bytes) throw new Error('계약서 PDF를 선택하세요.');
+    if (send && !marks.length) throw new Error('대리점 날인 위치를 1곳 이상 지정하세요.');
+    const code = c?.agency_code || v.agency_code;
+    const row = { title: v.title.trim(), kind: v.kind, memo: v.memo.trim() || null, marks };
+    if (newFile) {
+      const path = `${code}/contracts/${crypto.randomUUID()}_src.pdf`;
+      const { error: ue } = await sb.storage.from(BUCKET).upload(path, newFile, { contentType: 'application/pdf' }); if (ue) throw ue;
+      Object.assign(row, { src_path: path, src_name: newFile.name, src_hash: await sha256(bytes) });
+    }
+    if (send) Object.assign(row, { status: 'sent', reject_reason: null });
+    let id = c?.id;
+    if (c) { const { error: e } = await sb.from('contracts').update(row).eq('id', c.id); if (e) throw e; }
+    else {
+      const { data, error: e } = await sb.from('contracts').insert({ ...row, agency_code: code, status: send ? 'sent' : 'draft' }).select('id').single(); if (e) throw e;
+      id = data.id; await sb.from('contract_events').insert({ contract_id: id, action: 'created' });
+    }
+    if (send) await sb.from('contract_events').insert({ contract_id: id, action: c && c.status !== 'draft' ? 'resent' : 'sent' });
+    toast(send ? '대리점에 날인을 요청했습니다.' : '저장했습니다.');
+    Object.assign(st, { ctEdit: null, ctId: id }); render();
+  };
+  const run = (send) => async (e) => { e.preventDefault(); const b = e.target; b.disabled = true; try { await save(send); } catch (err) { fail(err); b.disabled = false; } };
+  main.querySelector('#ctSave').onclick = run(false);
+  main.querySelector('#ctSend').onclick = run(true);
+}
+
+// ---------- 대리점: 목록 + 날인 이미지 ----------
+async function ctListAgency(main) {
+  const code = me.agency_code;
+  const [{ data: list, error }, { data: seal }] = await Promise.all([
+    sb.from('contracts').select('id,agency_code,title,kind,status,updated_at').order('updated_at', { ascending: false }),
+    sb.from('agency_seals').select('*').eq('agency_code', code).maybeSingle()]);
+  if (error) throw error;
+  const todo = list.filter((c) => c.status === 'sent'), rest = list.filter((c) => c.status !== 'sent');
+  main.innerHTML = `<div class="ct">
+    <div class="lib-head"><h2>전자계약</h2><p class="muted">본사가 보낸 특약서 등을 확인하고, 등록한 날인 이미지로 온라인 날인합니다.</p></div>
+    <section class="card ct-sealcard">${ctSealCard(seal)}</section>
+    ${todo.length ? `<h3 class="section-title">날인할 계약 ${todo.length}건</h3>${ctRows(todo)}` : ''}
+    <h3 class="section-title">계약 내역</h3>${ctRows(rest)}
+  </div>`;
+  bindCtRows(main); bindSealCard(main, seal);
+}
+function ctSealCard(seal) {
+  const s = seal?.status;
+  return `<div class="ct-sealhead"><div class="ct-sealimg big">${seal ? '<img id="sealImg" alt="">' : '<span class="muted">미등록</span>'}</div>
+    <div class="ct-sealtxt"><h3>우리 대리점 날인 이미지 ${seal ? `<span class="ct-st ${SEAL_ST[s][1]}">${SEAL_ST[s][0]}</span>` : ''}</h3>
+      ${!seal ? '<p>전자계약에 쓸 도장(사용인감 등)을 흰 종이에 찍어 사진으로 올려 주세요. 배경은 자동으로 지워집니다.</p>'
+        : s === 'pending' ? `<p><b>동의서 원본을 우편으로 보내 주세요.</b> 본사가 받으면 승인되고, 그때부터 온라인 날인이 가능합니다.</p>`
+        : s === 'rejected' ? `<p class="ct-warn">반려 사유: ${esc(seal.note || '-')}<br>도장을 다시 올려 주세요.</p>`
+        : `<p>${esc(seal.kind)} · ${fmt(seal.approved_at).slice(0, 10)} 승인. 이 이미지로 날인합니다.</p>`}
+      <ol class="ct-steps"><li class="${seal ? 'done' : 'now'}">도장 이미지 등록</li><li class="${s === 'approved' ? 'done' : seal ? 'now' : ''}">동의서 출력·법인인감 날인 후 우편 발송</li><li class="${s === 'approved' ? 'done' : ''}">본사 승인 → 온라인 날인 가능</li></ol>
+      <div class="ct-btns"><button class="btn small ${seal ? '' : 'primary'}" id="sealUp">${seal ? '도장 다시 올리기' : '도장 이미지 등록'}</button>
+        ${seal && s !== 'rejected' ? '<button class="btn small primary" id="consentPdf">전자날인 사용 동의서 (PDF)</button>' : ''}</div></div></div>`;
+}
+function bindSealCard(root, seal) {
+  if (seal && root.querySelector('#sealImg')) signedUrl(seal.image_path).then((u) => { root.querySelector('#sealImg').src = u; });
+  root.querySelector('#sealUp').onclick = () => {
+    let blob = null;
+    const w = modal('도장 이미지 등록', `<p class="hint">흰 종이에 도장을 선명하게 찍고, 그림자 없이 위에서 찍은 사진을 올려 주세요. 이미 배경이 없는 PNG 파일도 됩니다.</p>
+      <label class="field"><span>종류</span><select name="kind">${SEAL_KINDS.map((k) => `<option>${k}</option>`).join('')}</select></label>
+      <label class="field"><span>사진 / 이미지</span><input type="file" id="sealFile" accept="image/*" required></label>
+      <div class="ct-sealprev" id="sealPrev"><span class="muted">미리보기</span></div>
+      ${seal?.status === 'approved' ? '<p class="ct-warn">다시 올리면 본사 승인 전까지 온라인 날인을 할 수 없습니다.</p>' : ''}`, async (v) => {
+      if (!blob) throw new Error('도장 사진을 선택하세요.');
+      const path = `${me.agency_code}/seal/${crypto.randomUUID()}.png`;
+      const { error: ue } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'image/png' }); if (ue) throw ue;
+      const { error: re } = await sb.rpc('seal_register', { p_path: path, p_kind: v.kind }); if (re) throw re;
+      toast('등록했습니다. 동의서를 출력해 우편으로 보내 주세요.'); render();
+    }, '등록');
+    w.querySelector('#sealFile').onchange = async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const prev = w.querySelector('#sealPrev');
+      try { blob = await cleanSeal(file); prev.innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="">`; }
+      catch (err) { blob = null; prev.innerHTML = `<span class="ct-warn">${esc(err.message)}</span>`; }
+    };
+  };
+  const cp = root.querySelector('#consentPdf'); if (cp) cp.onclick = async () => {
+    cp.disabled = true;
+    try { const bytes = await consentPdf(seal); saveBlob(new Blob([bytes], { type: 'application/pdf' }), `전자날인_사용_동의서_${agencyName(me.agency_code)}.pdf`); }
+    catch (e) { fail(e); } finally { cp.disabled = false; }
+  };
+}
+
+// 텍스트 줄바꿈 (pdf-lib)
+function wrapText(font, text, size, maxW) {
+  const out = [];
+  for (const para of String(text).split('\n')) {
+    let line = '';
+    for (const ch of para) { if (font.widthOfTextAtSize(line + ch, size) > maxW) { out.push(line); line = ch.trim() ? ch : ''; } else line += ch; }
+    out.push(line);
+  }
+  return out;
+}
+
+// 전자날인 사용 동의서 PDF
+async function consentPdf(seal) {
+  const K = await pdfKit(); const { PDFDocument, rgb, fontkit } = K.lib;
+  const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit);
+  const font = await pdf.embedFont(K.font, { subset: false });
+  const png = await pdf.embedPng(await getBytes(seal.image_path));
+  const pg = pdf.addPage([595.28, 841.89]); const L = 64, R = 595.28 - 64, black = rgb(0, 0, 0);
+  let y = 770;
+  const t = (s, size = 11, x = L, opt = {}) => pg.drawText(s, { x, y, size, font, color: black, ...opt });
+  const title = '전자날인 사용 동의서';
+  pg.drawText(title, { x: (595.28 - font.widthOfTextAtSize(title, 20)) / 2, y, size: 20, font, color: black }); y -= 50;
+  const ag = agencies.find((a) => a.code === me.agency_code) || {};
+  const rows = [['대리점명', ag.name || ''], ['대리점 코드', me.agency_code], ['대표자', me.contact_name || ''], ['등록 이미지 종류', seal.kind], ['등록일', fmt(seal.registered_at).slice(0, 10)]];
+  rows.forEach(([k, v]) => { pg.drawRectangle({ x: L, y: y - 8, width: R - L, height: 26, borderColor: black, borderWidth: 0.6 });
+    pg.drawLine({ start: { x: L + 120, y: y - 8 }, end: { x: L + 120, y: y + 18 }, thickness: 0.6, color: black }); t(k, 10.5, L + 10); t(v, 10.5, L + 132); y -= 26; });
+  y -= 22;
+  const body = `위 대리점(이하 "대리점")은 한국정보통신㈜(이하 "회사")와의 특약서·합의서 등 계약 문서를 회사가 운영하는 "KICC 파트너센터"에서 체결할 때, 아래 날인 이미지를 사용하는 것에 동의합니다.
+
+1. 대리점 대표자가 파트너센터에 로그인하여 본인 확인 절차를 거친 뒤 "동의 및 날인"을 한 경우, 아래 이미지가 날인된 문서는 대리점이 실물 도장으로 날인한 것과 같은 효력이 있는 것으로 합니다.
+2. 파트너센터는 날인 시각, 접속 정보, 본인 확인 방식, 문서 고유값(SHA-256)을 기록·보관하며, 이 기록은 체결 사실의 증빙으로 사용됩니다.
+3. 대리점은 계정 정보가 타인에게 노출되지 않도록 관리하며, 날인 이미지의 변경·사용 중지가 필요하면 즉시 회사에 알립니다.
+4. 보증(연대보증 포함)의 의사표시는 이 방식으로 하지 않으며, 관련 법령에 따라 서면으로 합니다.`;
+  for (const line of wrapText(font, body, 10.5, R - L)) { t(line, 10.5); y -= 18; }
+  y -= 10; t('[등록한 날인 이미지]', 10.5); y -= 12;
+  const box = 110, sc = Math.min(box / png.width, box / png.height);
+  pg.drawRectangle({ x: L, y: y - box - 10, width: box + 20, height: box + 20, borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.6 });
+  pg.drawImage(png, { x: L + 10 + (box - png.width * sc) / 2, y: y - box + (box - png.height * sc) / 2, width: png.width * sc, height: png.height * sc });
+  y -= box + 50;
+  t('20      년      월      일', 12, (595.28 - font.widthOfTextAtSize('20      년      월      일', 12)) / 2); y -= 44;
+  t(`대리점명 : ${ag.name || ''}`, 12, 300); y -= 28;
+  t('대 표 자 :                               (인)', 12, 300); y -= 16;
+  t('※ 법인은 법인인감, 개인사업자는 개인인감으로 날인', 9, 300, { color: rgb(0.35, 0.35, 0.35) }); y -= 34;
+  t('첨부 : 인감증명서 1부 (법인은 법인인감증명서)', 10.5); y -= 18;
+  t('한국정보통신㈜ 귀중', 14, R - font.widthOfTextAtSize('한국정보통신㈜ 귀중', 14));
+  pg.drawText(`보내실 곳: ${MAIL_TO}`, { x: L, y: 40, size: 8, font, color: rgb(0.35, 0.35, 0.35), maxWidth: R - L });
+  return pdf.save();
+}
+
+// ---------- 계약 상세 (본사·대리점 공통) ----------
+async function ctDetailView(main) {
+  const [{ data: c, error }, { data: evs }] = await Promise.all([
+    sb.from('contracts').select('*').eq('id', st.ctId).maybeSingle(),
+    sb.from('contract_events').select('*').eq('contract_id', st.ctId).order('at')]);
+  if (error) throw error;
+  if (!c) { st.ctId = null; return render(); }
+  const hq = isAdmin(), canSign = !hq && c.status === 'sent';
+  const { data: seal } = await sb.from('agency_seals').select('*').eq('agency_code', c.agency_code).maybeSingle();
+  if (canSign && !(evs || []).some((e) => e.action === 'viewed' && e.actor === me.id)) sb.rpc('contract_viewed', { p_id: c.id }).then(() => {});
+  const step = { draft: 0, rejected: 0, sent: 1, agency_signed: 2, completed: 3, cancelled: -1 }[c.status];
+  main.innerHTML = `<div class="ct">
+    <div class="crumbs"><a href="#" id="ctBack">전자계약</a> › <span>${ctNo(c.id)}</span></div>
+    <div class="ct-detail">
+      <div class="ct-side">
+        <section class="card ct-info">
+          <div class="ct-r1">${ctBadge(c.status)}<span class="muted">${ctNo(c.id)} · ${esc(c.kind)}</span></div>
+          <h2>${esc(c.title)}</h2>
+          <div class="muted">${esc(c.agency_code)} ${esc(agencyName(c.agency_code))}</div>
+          ${c.memo ? `<div class="ct-memo">${esc(c.memo)}</div>` : ''}
+          ${c.status === 'rejected' && c.reject_reason ? `<div class="ct-warn"><b>수정 요청</b><br>${esc(c.reject_reason)}</div>` : ''}
+          ${step >= 0 ? `<ol class="ct-steps h">${['본사 작성', '대리점 날인', '본사 날인', '체결 완료'].map((l, i) => `<li class="${i < step || step === 3 ? 'done' : i === step ? 'now' : ''}">${l}</li>`).join('')}</ol>` : ''}
+          <div class="ct-files">
+            <button class="btn small" data-dl="src">원본 PDF</button>
+            ${c.signed_path ? '<button class="btn small" data-dl="signed">대리점 날인본</button>' : ''}
+            ${c.final_path ? '<button class="btn small primary" data-dl="final">체결 완료본</button>' : ''}
+            <button class="btn small" id="ctVerify">파일 진위 확인</button>
+          </div>
+        </section>
+        <section class="card ct-act" id="ctAct"></section>
+        <section class="card ct-log"><h4>진행 이력</h4><ul>${(evs || []).map((e) => `<li><b>${esc(CT_EV[e.action] || e.action)}</b>
+          <span class="muted">${fmt(e.at)} · ${esc(e.actor_name || '')}${hq && e.ip ? ` · IP ${esc(e.ip)}` : ''}</span>${e.detail?.reason ? `<div class="muted">${esc(e.detail.reason)}</div>` : ''}</li>`).join('') || '<li class="muted">기록 없음</li>'}</ul>
+          ${c.signed_at ? `<div class="ct-proof"><div>날인자: ${esc(c.signed_name || '')} · ${esc(c.sign_method || '')}</div><div>서버 기록 시각: ${fmt(c.signed_at)}${hq && c.sign_ip ? ` · IP ${esc(c.sign_ip)}` : ''}</div>
+            <div>원본 SHA-256: <code>${esc(c.src_hash)}</code></div><div>날인본 SHA-256: <code>${esc(c.signed_hash || '')}</code></div></div>` : ''}</section>
+      </div>
+      <div class="ct-doc" id="ctDoc"><div class="empty">문서를 불러오는 중…</div></div>
+    </div></div>`;
+  main.querySelector('#ctBack').onclick = (e) => { e.preventDefault(); st.ctId = null; render(); };
+  const fileOf = { src: [c.src_path, c.src_name || `${ctNo(c.id)}_원본.pdf`], signed: [c.signed_path, `${ctNo(c.id)}_${c.title}_대리점날인본.pdf`],
+    final: [c.final_path, c.final_name || `${ctNo(c.id)}_${c.title}_체결완료본.pdf`] };
+  main.querySelectorAll('[data-dl]').forEach((b) => b.onclick = async () => {
+    const [p, n] = fileOf[b.dataset.dl]; try { saveBlob(new Blob([await getBytes(p)]), n.replace(/[\\/:*?"<>|]/g, '_')); } catch (e) { fail(e); }
+  });
+  main.querySelector('#ctVerify').onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.pdf,application/pdf';
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return; const h = await sha256(await f.arrayBuffer());
+      const hit = h === c.signed_hash ? '대리점 날인본' : h === c.src_hash ? '본사가 보낸 원본' : null;
+      modal('파일 진위 확인', `<div class="${hit ? 'ct-ok' : 'ct-warn'}">${hit ? `✔ 이 파일은 파트너센터에 기록된 <b>${hit}</b>과 같습니다. 바뀐 곳이 없습니다.` : '✘ 파트너센터에 기록된 원본·날인본과 다릅니다. 내용이 바뀌었거나 다른 파일입니다.'}</div>
+        <p class="hint">${esc(f.name)}<br>SHA-256: <code>${h}</code></p>`, async () => {}, '닫기');
+    };
+    inp.click();
+  };
+  const docBox = main.querySelector('#ctDoc');
+  const showPath = c.signed_path || c.src_path;
+  const sealUrl = !c.signed_path && canSign && seal?.status === 'approved' ? await signedUrl(seal.image_path) : null;
+  ctRenderPages(docBox, await getBytes(showPath), c.signed_path ? [] : c.marks, { sealUrl }).catch(fail);
+  const act = main.querySelector('#ctAct');
+  if (hq) ctHqActions(act, c); else ctAgencyActions(act, c, seal, canSign);
+  if (!act.innerHTML.trim()) act.remove();
+}
+
+function ctHqActions(act, c) {
+  const btns = [];
+  if (['draft', 'rejected', 'sent'].includes(c.status)) btns.push(`<button class="btn ${c.status === 'sent' ? '' : 'primary'}" id="hEdit">${c.status === 'sent' ? '회수해서 수정' : '수정 · 날인 요청'}</button>`);
+  if (c.status === 'agency_signed') act.innerHTML = `<h4>본사 날인</h4><ol class="ct-howto"><li>대리점 날인본을 출력합니다. (마지막 쪽은 체결 확인서)</li><li>본사 날인란에 실물 도장을 찍고, 필요하면 간인합니다.</li><li>스캔한 PDF(또는 사진)를 올리면 체결이 완료됩니다.</li></ol>
+    <div class="ct-btns"><button class="btn" data-dl2>출력용 날인본 받기</button><button class="btn primary" id="hFinal">본사 날인본 올리기</button></div>`;
+  if (!['completed', 'cancelled'].includes(c.status)) btns.push('<button class="btn danger" id="hCancel">계약 취소</button>');
+  if (btns.length) act.insertAdjacentHTML('beforeend', `<div class="ct-btns">${btns.join('')}</div>`);
+  const q = (s) => act.querySelector(s);
+  if (q('[data-dl2]')) q('[data-dl2]').onclick = () => document.querySelector('[data-dl="signed"]').click();
+  if (q('#hEdit')) q('#hEdit').onclick = async () => {
+    if (c.status === 'sent') {
+      if (!confirm('대리점의 날인 요청을 회수하고 수정할까요?')) return;
+      const { error } = await sb.from('contracts').update({ status: 'draft' }).eq('id', c.id); if (error) return fail(error);
+      await sb.from('contract_events').insert({ contract_id: c.id, action: 'recalled' });
+    }
+    st.ctEdit = c.id; render();
+  };
+  if (q('#hCancel')) q('#hCancel').onclick = () => modal('계약 취소', '<label class="field"><span>사유</span><textarea name="reason" rows="3" required></textarea></label>', async (v) => {
+    const { error } = await sb.from('contracts').update({ status: 'cancelled' }).eq('id', c.id); if (error) throw error;
+    await sb.from('contract_events').insert({ contract_id: c.id, action: 'cancelled', detail: { reason: v.reason } }); toast('취소했습니다.'); render();
+  }, '계약 취소');
+  if (q('#hFinal')) q('#hFinal').onclick = () => modal('본사 날인본 올리기', `<p class="hint">본사 도장을 찍은 날인본을 스캔해 올려 주세요. 올리면 대리점도 체결 완료본을 내려받을 수 있습니다.</p>
+    <label class="field"><span>파일 (PDF 또는 이미지)</span><input type="file" name="f" accept=".pdf,application/pdf,image/*" required></label>`, async (v, f) => {
+    const file = f.querySelector('[name=f]').files[0]; if (!file) throw new Error('파일을 선택하세요.');
+    const ext = (file.name.match(/\.[A-Za-z0-9]{1,5}$/) || ['.pdf'])[0].toLowerCase();
+    const path = `${c.agency_code}/contracts/${crypto.randomUUID()}_final${ext}`;
+    const { error: ue } = await sb.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream' }); if (ue) throw ue;
+    const { error } = await sb.from('contracts').update({ status: 'completed', final_path: path, final_name: `${ctNo(c.id)}_${c.title}_체결완료본${ext}`,
+      final_at: new Date().toISOString(), final_by: myName() }).eq('id', c.id);
+    if (error) throw error;
+    await sb.from('contract_events').insert({ contract_id: c.id, action: 'completed', detail: { file: file.name } });
+    toast('체결이 완료됐습니다.'); render();
+  }, '올리기');
+}
+
+function ctAgencyActions(act, c, seal, canSign) {
+  if (!canSign) {
+    if (c.status === 'agency_signed') act.innerHTML = '<p>날인을 마쳤습니다. 본사가 날인하면 <b>체결 완료본</b>을 내려받을 수 있습니다.</p>';
+    if (c.status === 'completed') act.innerHTML = '<p>체결이 완료됐습니다. 위의 <b>체결 완료본</b>을 보관해 주세요.</p>';
+    if (c.status === 'rejected') act.innerHTML = '<p>수정 요청을 보냈습니다. 본사가 수정해서 다시 보내면 날인할 수 있습니다.</p>';
+    return;
+  }
+  if (seal?.status !== 'approved') {
+    act.innerHTML = `<h4>날인 전 준비</h4><p>본사 승인을 받은 날인 이미지가 있어야 날인할 수 있습니다. ${seal ? '동의서 원본을 우편으로 보내셨다면 본사 승인을 기다려 주세요.' : '전자계약 첫 화면에서 도장 이미지를 등록해 주세요.'}</p>
+      <div class="ct-btns"><button class="btn" id="aReject">수정 요청</button></div>`;
+  } else {
+    act.innerHTML = `<h4>동의 및 날인</h4>
+      <p class="hint">오른쪽 문서의 표시된 자리에 등록한 날인 이미지가 찍힙니다. 끝까지 읽고 진행해 주세요.</p>
+      <form id="signF">
+        <label class="ct-agree"><input type="checkbox" name="agree" required> 계약서 내용을 모두 확인했으며, 등록한 날인 이미지로 날인하는 데 동의합니다.</label>
+        <label class="field"><span>본인 확인 — 파트너센터 비밀번호</span><input type="password" name="pw" required autocomplete="current-password"></label>
+        <div class="ct-btns"><button type="button" class="btn" id="aReject">수정 요청</button><button class="btn primary">동의 및 날인</button></div>
+      </form>`;
+    act.querySelector('#signF').onsubmit = async (e) => {
+      e.preventDefault(); const b = e.target.querySelector('.btn.primary'); b.disabled = true; b.textContent = '날인하는 중…';
+      try { await ctSign(c, seal, e.target.pw.value); toast('날인했습니다. 본사 날인 후 체결이 완료됩니다.'); render(); }
+      catch (err) { fail(err); b.disabled = false; b.textContent = '동의 및 날인'; }
+    };
+  }
+  act.querySelector('#aReject').onclick = () => modal('수정 요청', '<label class="field"><span>수정이 필요한 내용</span><textarea name="reason" rows="4" required></textarea></label>', async (v) => {
+    const { error } = await sb.rpc('contract_reject', { p_id: c.id, p_reason: v.reason }); if (error) throw error; toast('본사에 수정 요청을 보냈습니다.'); render();
+  }, '보내기');
+}
+
+// 날인본 만들기: 원본 확인 → 날인 이미지 → 각 쪽 하단 문서번호 → 체결 확인서 → 업로드 → 서버 기록
+async function ctSign(c, seal, pw) {
+  const { error: ae } = await sb.auth.signInWithPassword({ email: me.email, password: pw });
+  if (ae) throw new Error('비밀번호가 맞지 않습니다.');
+  const src = await getBytes(c.src_path);
+  const srcHash = await sha256(src);
+  if (srcHash !== c.src_hash) throw new Error('원본 문서가 본사가 보낸 것과 다릅니다. 본사에 문의해 주세요.');
+  const K = await pdfKit(); const { PDFDocument, rgb, fontkit } = K.lib;
+  const pdf = await PDFDocument.load(src); pdf.registerFontkit(fontkit);
+  const font = await pdf.embedFont(K.font, { subset: false });
+  const png = await pdf.embedPng(await getBytes(seal.image_path));
+  const pages = pdf.getPages(), now = new Date(), gray = rgb(0.45, 0.45, 0.45);
+  c.marks.forEach((m) => {
+    const pg = pages[m.p - 1]; if (!pg) return;
+    const sc = Math.min(m.w / png.width, m.w / png.height), w = png.width * sc, h = png.height * sc;
+    pg.drawImage(png, { x: m.x - w / 2, y: m.y - h / 2, width: w, height: h });
+  });
+  const foot = `KICC 파트너센터 전자계약 ${ctNo(c.id)} · 원본 ${srcHash.slice(0, 16)} · ${pages.length + 1}쪽 중`;
+  pages.forEach((pg, i) => pg.drawText(`${foot} ${i + 1}쪽`, { x: 24, y: 12, size: 6.5, font, color: gray }));
+  // 체결 확인서
+  const ag = agencies.find((a) => a.code === c.agency_code) || {};
+  const pg = pdf.addPage([595.28, 841.89]); const L = 60, R = 535; let y = 770;
+  const T = (s, size = 10.5, x = L, color = rgb(0, 0, 0)) => pg.drawText(s, { x, y, size, font, color });
+  const ti = '전자 체결 확인서'; pg.drawText(ti, { x: (595.28 - font.widthOfTextAtSize(ti, 19)) / 2, y, size: 19, font }); y -= 26;
+  T('이 문서는 KICC 파트너센터에서 아래와 같이 대리점이 동의·날인했음을 확인합니다.', 9.5, L, gray); y -= 30;
+  const ua = navigator.userAgent;
+  const env = /Android/i.test(ua) ? 'Android' : /iPhone|iPad/i.test(ua) ? 'iOS' : /Windows/i.test(ua) ? 'Windows' : /Mac/i.test(ua) ? 'macOS' : '기타';
+  const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : /Firefox\//.test(ua) ? 'Firefox' : '브라우저';
+  const rows = [['문서 번호', ctNo(c.id)], ['계약명', `${c.title} (${c.kind})`], ['대리점', `${c.agency_code} ${ag.name || ''}`],
+    ['날인자', `${myName()} (대표자 · ${me.email})`], ['본인 확인', '파트너센터 로그인 + 비밀번호 재확인'],
+    ['날인 이미지', `${seal.kind} · 본사 승인 ${fmt(seal.approved_at).slice(0, 10)} (전자날인 사용 동의서 수령)`],
+    ['동의 시각', `${fmt(now)} (이용 기기 기준, 서버 기록 시각은 파트너센터에 보관)`], ['접속 환경', `${env} · ${br}`],
+    ['원본 SHA-256', srcHash], ['날인 위치', `${c.marks.length}곳 (${[...new Set(c.marks.map((m) => m.p))].join(', ')}쪽)`]];
+  rows.forEach(([k, v]) => {
+    const lines = wrapText(font, v, 9.5, R - L - 130), hh = Math.max(26, lines.length * 14 + 12);
+    pg.drawRectangle({ x: L, y: y - hh + 18, width: R - L, height: hh, borderColor: rgb(0, 0, 0), borderWidth: 0.5 });
+    pg.drawRectangle({ x: L, y: y - hh + 18, width: 118, height: hh, color: rgb(0.95, 0.95, 0.95), borderColor: rgb(0, 0, 0), borderWidth: 0.5 });
+    T(k, 9.5, L + 10); lines.forEach((ln, i) => pg.drawText(ln, { x: L + 130, y: y - i * 14, size: 9.5, font }));
+    y -= hh;
+  });
+  y -= 24;
+  for (const ln of wrapText(font, `위 대리점은 본 문서(${pages.length}쪽)의 내용을 확인하고, 사전에 서면으로 동의한 날인 이미지로 날인하는 데 동의하였습니다. 한국정보통신㈜은 이 날인본을 출력하여 실물 날인함으로써 계약을 체결합니다.\n\n날인본의 진위는 파트너센터의 [파일 진위 확인] 기능으로 확인할 수 있으며, 파일이 한 글자라도 바뀌면 확인되지 않습니다.`, 10, R - L)) { T(ln, 10); y -= 17; }
+  pg.drawText(`${foot} ${pages.length + 1}쪽`, { x: 24, y: 12, size: 6.5, font, color: gray });
+  const out = await pdf.save();
+  const signedHash = await sha256(out);
+  const path = `${c.agency_code}/contracts/${crypto.randomUUID()}_signed.pdf`;
+  const { error: ue } = await sb.storage.from(BUCKET).upload(path, new Blob([out], { type: 'application/pdf' }), { contentType: 'application/pdf' });
+  if (ue) throw ue;
+  const { error } = await sb.rpc('contract_sign', { p_id: c.id, p_src_hash: srcHash, p_signed_path: path, p_signed_hash: signedHash,
+    p_method: '파트너센터 로그인 + 비밀번호 재확인', p_ua: ua });
+  if (error) throw error;
 }
