@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=91b966b';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=c805106';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1874,7 +1874,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=91b966b'), import('./docfill.js?v=91b966b'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=c805106'), import('./docfill.js?v=c805106'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1939,7 +1939,7 @@ function sealSteps(info) {
     { k: 'f_bank', t: '거래처 등록 및 입금계좌(인감) 신고서', n: 1, s: ['<b>&lt;신고인&gt;</b> 칸에 주소·상호·대표자를 <b>자필</b>로 기재',
       `<b>${corp ? '법인인감' : '대표자 인감'}</b> 칸에 ${seal}`, '<b>통장인감</b> 칸에 통장에 등록된 도장', corp && info.use_seal ? '<b>사용인감</b> 칸에 사용인감' : '<b>사용인감</b> 칸: 사용인감이 <b>있으면</b> 사용인감도 날인 (없으면 비워 둠)'] },
     { k: 'f_sec', t: '보안 서약서 (대리점용)', n: 1, s: [`마지막 쪽 <b>대표자 (인)</b>에 ${seal}`] },
-    { k: 'f_secp', t: '개인정보보호(보안) 서약서 (개인용)', n: staff.length || 1, s: [`각 장 하단 <b>서약인 (인)</b>에 본인이 서명 또는 날인${staff.length ? ` — ${staff.map(esc).join(', ')}` : ''}`] },
+    { k: 'f_secp', t: '개인정보보호(보안) 서약서 (개인용)', n: staff.length || 1, s: ['각 장 하단 <b>서약인 (인)</b>에 본인이 서명 또는 날인'] },
     ...(corp && info.use_seal ? [{ k: 'f_seal', t: '사용인감계', n: 1, s: ['<b>사용인감</b> 네모 칸에 앞으로 쓸 도장', '하단 <b>대표이사 (인)</b>에 법인인감'] }] : []),
     ...(corp ? [{ k: 'f_guar', t: '연대보증승락서', n: 1, s: ['하단 <b>연대보증인 이름 (인)</b>에 대표자 <b>개인 인감</b> (인감증명서와 같은 도장)'] }] : []),
     { k: 'notice', t: '가맹점모집인 등록신청인 고지사항', n: 1, s: ['7개 문항을 <b>자필</b>로 예/아니오에 ☑', '하단 <b>신청인 서명 및 날인</b>'] },
@@ -2025,7 +2025,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=91b966b')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=c805106')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2665,7 +2665,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=91b966b');
+  const V = await import('./viewer.js?v=c805106');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2806,7 +2806,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=91b966b');
+    const V = await import('./viewer.js?v=c805106');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
