@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=366560a';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=bafbf6b';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1463,7 +1463,7 @@ async function loadPolicy() {
   } catch { policyCache = null; }
   return policyCache;
 }
-const won = (m) => `${Math.round(m).toLocaleString('ko-KR')}만원`;
+const won = (m) => `${(Math.round(m * 10) / 10).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만원`;
 function policyCardsHtml(P, compact = false) {
   return `<div class="pol-cards ${compact ? 'compact' : ''}">${P.cards.map((c, i) => `<article class="pol-card t-${esc(c.tone || 'gray')}" ${c.page ? `data-polpage="${esc(c.page)}"` : ''}>
     <div class="pol-top"><span class="pol-tag">${esc(c.tag)}</span>${c.until ? `<span class="pol-until">${esc(c.until)}</span>` : ''}</div>
@@ -1473,7 +1473,13 @@ function policyCardsHtml(P, compact = false) {
 }
 function policyCalc(P, n, m) {
   const C = P.calc.connect, Q = P.calc.qr, rows = [];
-  if (n > 0) {
+  if (n > 0 && C.unitPay !== undefined) {   // 가맹점마다 1대 설치 기준
+    rows.push([`장비당 인센티브 (${n}대 × ${C.unitPay}만 · 설치·특별·누적)`, n * C.unitPay]);
+    rows.push([`가맹점당 인센티브 (${n}곳 × ${C.storePay}만 · 우수대리점 추가·place+·페이스사인)`, n * C.storePay]);
+    rows.push([`장비값 실부담 (${n}대 × ${C.equip}만)`, -n * C.equip]);
+    for (const [every, amt] of C.cum) { const k = Math.floor(n / every); if (k) rows.push([`누적 설치 인센티브 (${every.toLocaleString()}대당 ${won(amt)} × ${k})`, k * amt]); }
+    for (const [at, amt] of C.milestones) if (n >= at) rows.push([`누적 ${at.toLocaleString()}대 달성`, amt]);
+  } else if (n > 0) {
     rows.push([`Npay connect 대리점 수령액 (${n}대 × ${C.per}만)`, n * C.per]);
     rows.push([`H/W 설치수수료 (${n}대 × ${C.hw}만)`, n * C.hw]);
     for (const [every, amt] of C.cum) { const k = Math.floor(n / every); if (k) rows.push([`누적 설치 인센티브 (${every.toLocaleString()}대당 ${won(amt)} × ${k})`, k * amt]); }
@@ -1491,7 +1497,7 @@ function policyHtml(P) {
     <p class="pol-head"><span class="pol-period">${esc(P.period)}</span> ${esc(P.headline)}</p>
     ${policyCardsHtml(P)}
     <section class="pol-calc"><h4>💰 우리 대리점 예상 수익 계산</h4>
-      <div class="pol-in"><label>Npay connect 설치 <input type="number" min="0" step="1" value="10" id="pcN"> 대</label>
+      <div class="pol-in"><label>Npay connect 설치 가맹점 <input type="number" min="0" step="1" value="10" id="pcN"> 곳 <small class="muted">(가맹점마다 1대)</small></label>
         <label>네이버 이지QR 설치 <input type="number" min="0" step="1" value="50" id="pcM"> 곳</label></div>
       <div id="pcOut"></div></section>
     <ul class="pol-notes">${(P.notes || []).map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
@@ -1968,7 +1974,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=366560a'), import('./docfill.js?v=366560a'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=bafbf6b'), import('./docfill.js?v=bafbf6b'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2119,7 +2125,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=366560a')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=bafbf6b')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2759,7 +2765,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=366560a');
+  const V = await import('./viewer.js?v=bafbf6b');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2901,7 +2907,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=366560a');
+    const V = await import('./viewer.js?v=bafbf6b');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
