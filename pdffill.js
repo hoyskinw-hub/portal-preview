@@ -59,15 +59,19 @@ export async function buildPdf(lib, tplBytes, layout, fontBytes, data, title = '
       const text = String(v).replace(/\r/g, '');
       const base = Math.min(f.s, 13);
       const maxW = Math.max(f.w || 100, 10);
-      const multi = text.includes('\n') || (f.h && f.h > base * 2.6 && font.widthOfTextAtSize(text, base) > maxW);
-      if (multi && f.h) {
-        const lh = base * 1.4;
-        const lines = wrap(font, text, base, maxW).slice(0, Math.max(1, Math.floor((f.h - 2) / lh)));
-        const y0 = f.solo ? f.y - base * 0.9 : f.y;
-        lines.forEach((ln, i) => pg.drawText(ln, { x: f.x, y: y0 - i * lh, size: base, font, color: black }));
+      const fits = (sz) => font.widthOfTextAtSize(text, sz) <= maxW;
+      // 여러 줄: 줄바꿈이 있는 값, 또는 칸에 값만 있고 한 줄에 넣으면 글자가 너무 작아지는 경우
+      const hh = f.h || base * 3;   // 아래 선이 없으면 두 줄까지
+      const canWrap = f.solo && hh > base * 2.3;
+      if (canWrap && (text.includes('\n') || !fits(base * 0.78))) {
+        const sz = text.includes('\n') ? base : base * 0.88, lh = sz * 1.3;
+        const maxLines = Math.max(1, Math.floor((hh - 2) / lh));
+        const lines = wrap(font, text, sz, maxW).slice(0, maxLines);
+        const y0 = text.includes('\n') || lines.length > 2 ? f.y - sz * 0.9 : f.y + (lines.length - 1) * lh / 2 - sz * 0.36;
+        lines.forEach((ln, i) => pg.drawText(ln, { x: f.x, y: y0 - i * lh, size: sz, font, color: black }));
         continue;
       }
-      const s = fitText(font, text, base, maxW);
+      const s = fitText(font, text.replace(/\n/g, ' '), base, maxW);
       const tw = font.widthOfTextAtSize(text, s);
       let x = f.x;
       if (f.a === 'g') x = f.x + Math.max(0, (maxW - tw) / 2);
