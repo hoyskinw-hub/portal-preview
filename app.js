@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=0e87df6';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=a41dbcc';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1874,7 +1874,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=0e87df6'), import('./docfill.js?v=0e87df6'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=a41dbcc'), import('./docfill.js?v=a41dbcc'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2024,7 +2024,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=0e87df6')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=a41dbcc')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2105,11 +2105,17 @@ function guideThenDownload(info, app, which) {
           }
           box.style.width = (left - gap + 4) + 'px';
           at('mini gy', Math.round(tw * 0.35), th * 0.58, '계인');
-          for (let j = 0; j < pos.length - 1; j++) at('mini gn', pos[j].left + tw + gap / 2, th * 0.62, '간인');
+          // 간인: [간인 찍는 방법]과 같은 모습 — 앞 장 아래쪽을 접어 올린 상태로, 접힌 선(쪽 가운데)에 걸쳐 오른쪽(대리점 자리)에 찍기
+          const ganinOn = pos.length >= 3 ? [1] : pos.slice(1).map((_, j) => j + 1);
+          for (const j of ganinOn) {
+            const ov = document.createElement('div'); ov.className = 'ag-foldov'; ov.style.left = pos[j].left + 'px'; ov.style.width = tw + 'px'; ov.style.height = Math.round(th / 2) + 'px';
+            ov.innerHTML = `<span>${pos[j].pn - 1}쪽 접어 올림</span>`; box.append(ov);
+            at('mini gn', pos[j].left + tw * 0.62, th / 2, '간인');
+          }
           const lp = pos[pos.length - 1];
           (x.stamps || []).forEach((p) => at(p.k.startsWith('box_') ? 'box' : '', lp.left + (p.x / lp.sz.w) * tw, (1 - p.y / lp.sz.h) * th, '인'));
           const cap = document.createElement('div'); cap.className = 'ag-rowcap';
-          cap.innerHTML = `<span><i class="gy"></i>계인 · 첫 장(2부 맞댄 경계)</span><span><i class="gn"></i>간인 · 모든 쪽 경계${n > 3 ? ` (${n - 1}곳)` : ''}</span><span><i></i>인감 · 서명란</span>`;
+          cap.innerHTML = `<span><i class="gy"></i>계인 · 첫 장(2부 맞댄 경계)</span><span><i class="gn"></i>간인 · 앞 장 접은 선, 모든 쪽 경계(${n - 1}곳)</span><span><i></i>인감 · 서명란</span>`;
           box.append(cap);
         } else {
           const { c, sz } = await pageCanvas(x.p, W);
@@ -2657,7 +2663,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=0e87df6');
+  const V = await import('./viewer.js?v=a41dbcc');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2798,7 +2804,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=0e87df6');
+    const V = await import('./viewer.js?v=a41dbcc');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
