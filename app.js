@@ -1586,10 +1586,10 @@ function mailItems(d = {}) {
   const L = [
     ['g', '작성·날인 서류 (포털에서 출력)'],
     ['apply', '대리점 개설 신청서', 1, '내용 확인 후 날인'],
-    ['c_main', '대리점 계약서', 2, corp ? '간인·직인, 연대보증인(대표자) 날인' : '간인·직인'],
-    ['c_fee', '가맹점관리수수료 및 DDC 지급수수료 관련 특약서', 2, '간인·직인'],
-    ['c_lease', '신용카드조회기 임대차 계약서', 2, '간인·직인'],
-    ['c_ddc', 'DDC 매출전표 투입업무 특약서', 2, '간인·직인'],
+    ['c_main', '대리점 계약서', corp ? 3 : 2, corp ? '계인·간인·직인, 연대보증인(대표자) 날인 / 본사 날인 후 대리점·연대보증인용 반송' : '계인·간인·직인 / 본사 날인 후 대리점용 반송'],
+    ['c_fee', '가맹점관리수수료 및 DDC 지급수수료 관련 특약서', 2, '계인·간인·직인'],
+    ['c_lease', '신용카드조회기 임대차 계약서', 2, '계인·간인·직인'],
+    ['c_ddc', 'DDC 매출전표 투입업무 특약서', 2, '계인·간인·직인'],
     ['f_bank', '거래처 등록 및 거래대금 입금계좌(인감) 신고서', 1, '인감 날인, 통장 인감과 동일'],
     ['f_sec', '보안서약서 (대리점용)', 1, '대표자 날인'],
     ['f_secp', '보안서약서 (개인용)', staff, '대표자 포함 VAN 업무 임직원 각자 서명'],
@@ -1675,10 +1675,17 @@ async function buildPdfBytes(which, info, app) {
   const K = await pdfKit();
   const sub = app.submitted_at ? new Date(app.submitted_at) : null;
   const data = K.docData(info, { appNo: app.id, recvDate: sub ? `${sub.getFullYear()}. ${sub.getMonth() + 1}. ${sub.getDate()}.` : undefined });
-  const build = async (n) => K.buildPdf(K.lib, await tplFile(`${n}.pdf`), await tplFile(`${n}.json`, 'json'), K.font, data);
-  if (which !== 'all') return build(which);
+  const build = async (n, opt = {}) => K.buildPdf(K.lib, await tplFile(`${n}.pdf`), await tplFile(`${n}.json`, 'json'), K.font, data, '', opt);
+  if (which === 'apply') return build('apply');
+  if (which === 'forms') return build('forms', { bundle: true });
+  if (which.startsWith('doc:')) {        // 서류 하나만 다시 받기 (부수 반영)
+    const k = which.slice(4);
+    if (k === 'apply_1') return build('apply');
+    if (k === 'notice') return tplFile('notice.pdf');
+    return build('forms', { bundle: true, only: [k] });
+  }
   const out = await K.lib.PDFDocument.create();
-  for (const src of [await build('apply'), await build('forms'), await tplFile('notice.pdf')]) {
+  for (const src of [await build('apply'), await build('forms', { bundle: true }), await tplFile('notice.pdf')]) {
     const d = await K.lib.PDFDocument.load(src);
     (await out.copyPages(d, d.getPageIndices())).forEach((p) => out.addPage(p));
   }
@@ -1688,7 +1695,9 @@ async function buildPdfBytes(which, info, app) {
 async function makePdf(which, info, app) {
   const nm = (info.agency || '대리점').replace(/[\\/:*?"<>|]/g, '');
   const bytes = await buildPdfBytes(which, info, app);
-  const title = which === 'all' ? `개설 서류 일체_${nm}.pdf` : `${which === 'apply' ? '대리점 개설 신청서' : '계약서·신고서·서약서'}_${nm}.pdf`;
+  const one = which.startsWith('doc:') ? sealSteps(info).find((x) => x.k === which.slice(4)) : null;
+  const title = which === 'all' ? `개설 서류 인쇄용_${nm} (1부·단면 인쇄).pdf`
+    : one ? `${one.t} ${one.n}부_${nm}.pdf` : `${which === 'apply' ? '대리점 개설 신청서' : '계약서·신고서·서약서 인쇄용'}_${nm}.pdf`;
   saveBlob(new Blob([bytes], { type: 'application/pdf' }), title);
 }
 
@@ -1699,7 +1708,7 @@ function sealSteps(info) {
   const staff = staffList(info);
   const L = [
     { k: 'apply_1', t: '대리점 개설 신청서', n: 1, s: [`2쪽 하단 <b>신청인 대표자 (인)</b>에 ${seal}`] },
-    { k: 'c_main', t: '대리점 계약서', n: 2, s: ['첫 장 <b>계인</b>(2부를 겹쳐 걸쳐 찍기)', '모든 쪽 사이에 <b>간인</b>(두 쪽에 걸쳐 찍기)', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`,
+    { k: 'c_main', t: '대리점 계약서', n: corp ? 3 : 2, s: [`첫 장 <b>계인</b>(${corp ? '3부' : '2부'}를 겹쳐 걸쳐 찍기)`, '모든 쪽 사이에 <b>간인</b>(두 쪽에 걸쳐 찍기)', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`, ...(corp ? ['3부는 <b>본사·대리점·연대보증인 보관용</b>입니다. 3부 모두 날인'] : []),
       ...(corp ? ['같은 쪽 <b>"연대보증인" 이름 (인)</b>에 대표자 <b>개인 인감</b>'] : [])] },
     { k: 'c_fee', t: '가맹점관리수수료 및 DDC 지급수수료 관련 특약서', n: 2, s: ['첫 장 <b>계인</b>', '모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
     { k: 'c_ddc', t: 'DDC 매출전표 투입업무 특약서', n: 2, s: ['첫 장 <b>계인</b>', '모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
@@ -1721,17 +1730,18 @@ async function sealGuide(info, app, which = 'all') {
     const data = K.docData(info, { appNo: app.id });
     const fl = await tplFile('forms.json', 'json');
     const off = which === 'all' ? 2 : 0;
-    const r = K.docPages(fl, data, off);
+    const r = K.docPages(fl, data, off, { bundle: true });
     pages = { ...r.pages, apply_1: { from: 1, to: 2 }, notice: { from: off + r.count + 1, to: off + r.count + 1 } };
   } catch (e) { /* 쪽 번호 없이 안내 */ }
   const corp = info.corp_type === '법인';
   const rows = sealSteps(info).filter((x) => which === 'all' || (which === 'apply' ? x.k === 'apply_1' : !['apply_1', 'notice'].includes(x.k)));
-  const pg = (k) => { const p = pages[k]; return p && which !== 'apply' || k === 'apply_1' ? (p ? (p.from === p.to ? `${p.from}쪽` : `${p.from}~${p.to}쪽`) : '') : ''; };
+  const rg = (a) => (a.from === a.to ? `${a.from}쪽` : `${a.from}~${a.to}쪽`);
+  const pg = (k) => { const p = pages[k]; if (!p || (which === 'apply' && k !== 'apply_1')) return ''; return p.copies && p.copies.length > 1 ? p.copies.map((c) => `${rg(c)}<br><small>${c.label}</small>`).join('<br>') : rg(p); };
   return `<div class="sg">
     <div class="sg-key"><div><b>${corp ? '법인인감' : '대표자 인감'}</b> 인감증명서와 같은 도장</div><div><b>간인</b> 겹친 두 쪽에 걸쳐 찍기</div><div><b>2부</b> 계약서는 2부 모두 각각 날인</div></div>
     <table class="tbl sg-tbl"><tr><th>서류</th><th>부수</th><th>쪽</th><th>날인·기재 방법</th></tr>
     ${rows.map((x) => `<tr><td><b>${esc(x.t)}</b></td><td class="c">${x.n}부</td><td class="c">${pg(x.k)}</td><td><ul>${x.s.map((t) => `<li>${t}</li>`).join('')}</ul></td></tr>`).join('')}</table>
-    <p class="hint">${which === 'all' ? '쪽 번호는 [전체 서류 한 번에] PDF 기준입니다.' : which === 'forms' ? '쪽 번호는 [계약서·신고서·서약서] PDF 기준입니다.' : ''}
+    <p class="hint">${which === 'all' ? '쪽 번호는 [전체 서류 한 번에] PDF 기준입니다. 부수가 이미 들어 있으니 <b>1부·단면</b>으로 인쇄하세요.' : which === 'forms' ? '쪽 번호는 [계약서·신고서·서약서] PDF 기준입니다. <b>1부·단면</b>으로 인쇄하세요.' : ''}
       ${info.doc_date ? '' : ' 작성일을 비워 두어 날짜 칸이 빈칸입니다. 날인하는 날짜를 손으로 적어 주세요.'}
       ${info.use_seal && corp ? '' : ''} 날인한 원본은 [원본 서류 우편 발송] 목록과 함께 보내 주세요.</p></div>`;
 }
@@ -1749,9 +1759,9 @@ async function guideSlides(info, app) {
   const K = await pdfKit();
   const data = K.docData(info, { appNo: app.id });
   const fl = await tplFile('forms.json', 'json'), al = await tplFile('apply.json', 'json');
-  const plan = K.pagePlan(fl, data);
+  const plan = K.pagePlan(fl, data, { bundle: true });
   const nApply = al.pages.length, nForms = plan.length, notice = nApply + nForms + 1;
-  const { pages } = K.docPages(fl, data, nApply);
+  const { pages } = K.docPages(fl, data, nApply, { bundle: true });
   pages.apply_1 = { from: 1, to: nApply };
   pages.notice = { from: notice, to: notice };
   const corp = info.corp_type === '법인';
@@ -1765,15 +1775,18 @@ async function guideSlides(info, app) {
   const S = [];
   const cm = pages.c_main;
   if (cm) {
-    S.push({ kind: 'gyein', t: '계약서 첫 장 계인', p: cm.from, sub: '양사 계약서 4종 공통 · 2부의 첫 장에 걸쳐',
-      s: ['계약서 2부를 조금 어긋나게 겹쳐 놓고, <b>두 부의 첫 장에 걸치도록</b> 도장을 찍습니다.', '대리점 계약서 · 특약서 2종 · 임대차 계약서 <b>4종 모두</b> 각각 합니다.'] });
+    S.push({ kind: 'gyein', t: '계약서 첫 장 계인', p: cm.copies[0].from, p2: (cm.copies[1] || cm.copies[0]).from, sub: `양사 계약서 4종 공통 · 보관용 ${corp ? '3부(대리점 계약서)' : '2부'}의 첫 장에 걸쳐`,
+      s: [`보관용 ${corp ? '2~3부' : '2부'}를 조금 어긋나게 겹쳐 놓고, <b>모든 부의 첫 장에 걸치도록</b> 도장을 찍습니다.`, '대리점 계약서 · 특약서 2종 · 임대차 계약서 <b>4종 모두</b> 각각 합니다.'] });
     S.push({ kind: 'ganin', t: '계약서 쪽마다 간인', p: cm.from + 1, sub: '각 계약서의 모든 쪽 사이',
       s: ['앞 쪽(예: 2쪽)의 <b>아래쪽을 위로 반 접어</b> 다음 쪽(3쪽)이 드러나게 하고, <b>접힌 선과 다음 쪽에 걸쳐</b> 도장을 찍습니다.', '1-2쪽, 2-3쪽 … 마지막 쪽까지 <b>모든 쪽 사이</b>에, 계약서 4종 · 2부 모두 합니다.'] });
   }
   for (const x of sealSteps(info)) {
     const pg = pages[x.k]; if (!pg) continue;
-    const p = x.k === 'f_secp' ? pg.from : pg.to;
-    S.push({ kind: 'page', t: x.t, p, sub: `${x.n}부 · ${pg.from === pg.to ? pg.from : pg.from + '~' + pg.to}쪽`, s: x.s, stamps: stampsOf(p) });
+    const c0 = pg.copies?.[0];
+    const p = x.k === 'f_secp' ? pg.from : (c0 ? c0.to : pg.to);
+    const rg = (a) => (a.from === a.to ? `${a.from}` : `${a.from}~${a.to}`);
+    const sub = pg.copies && pg.copies.length > 1 ? `${x.n}부 · ${pg.copies.map((c) => `${rg(c)}쪽(${c.label.replace(' 보관용', '')})`).join(', ')}` : `${x.n}부 · ${rg(pg)}쪽`;
+    S.push({ kind: 'page', t: x.t, p, sub, s: x.s, stamps: stampsOf(p) });
   }
   return S;
 }
@@ -1805,7 +1818,7 @@ function guideThenDownload(info, app, which) {
         const mk = (cls, left, top) => { const s = document.createElement('div'); s.className = 'ag-stamp ' + cls; s.textContent = '인'; s.style.left = left + 'px'; s.style.top = top + 'px'; return s; };
         if (x.kind === 'gyein') {
           const w = Math.round(W * 0.74);
-          for (const k of [0, 1]) { const { c } = await pageCanvas(x.p, w); const pw = document.createElement('div'); pw.className = 'ag-page ag-copy' + k; pw.style.left = (k * w * 0.32) + 'px'; pw.style.top = (k * 14) + 'px'; pw.append(c); box.append(pw); }
+          for (const k of [0, 1]) { const { c } = await pageCanvas(k ? x.p2 : x.p, w); const pw = document.createElement('div'); pw.className = 'ag-page ag-copy' + k; pw.style.left = (k * w * 0.32) + 'px'; pw.style.top = (k * 14) + 'px'; pw.append(c); box.append(pw); }
           box.style.width = (w * 1.32) + 'px'; box.style.height = (w * 1.414 + 16) + 'px';
           box.append(mk('big', w * 0.32 + w * 0.68 - 4, w * 0.36));
         } else if (x.kind === 'ganin') {
@@ -1857,7 +1870,7 @@ async function openNoticePdf() {
 function bindMakeDocs(root, info, app) {
   root.querySelectorAll('[data-guide]').forEach((b) => b.onclick = () => guideThenDownload(info, app, 'all'));
   root.querySelectorAll('[data-pdf]').forEach((b) => b.onclick = async () => {
-    if (!isAdmin()) return guideThenDownload(info, app, b.dataset.pdf);   // 대리점은 날인 가이드를 먼저 보여줌
+    if (!isAdmin() && !b.dataset.pdf.startsWith('doc:')) return guideThenDownload(info, app, b.dataset.pdf);   // 대리점은 날인 가이드를 먼저 보여줌
     const t = b.innerHTML; b.disabled = true; b.textContent = 'PDF 만드는 중…';
     try { await makePdf(b.dataset.pdf, info, app); toast('PDF를 내려받았습니다.'); } catch (e) { fail(e); }
     b.disabled = false; b.innerHTML = t;
@@ -2043,11 +2056,13 @@ async function viewOnboard(main) {
         <button class="btn small" data-npdf>📄 원본 양식(PDF) 출력</button>`)}
       <article class="ob-doc"><div class="ob-doc-head"><span class="ob-num">3</span><div class="ob-doc-t"><b>서류 자동 작성 · 출력</b>
           <div class="ob-desc">기본 정보가 원본 양식에 채워진 PDF를 내려받아 출력하고 날인합니다.</div></div></div>
-        <div class="ob-doc-body">${S.apply.doc ? `<button class="btn small primary" data-pdf="all">⬇ 전체 서류 한 번에 (PDF)</button>
+        <div class="ob-doc-body">${S.apply.doc ? `<button class="btn small primary" data-pdf="all">⬇ 전체 서류 한 번에 (인쇄용 PDF)</button>
           <button class="btn small" data-pdf="apply">개설 신청서</button>
           <button class="btn small" data-pdf="forms">계약서·신고서·서약서</button>
           <button class="btn small" data-guide>📋 날인 가이드</button>
-          <ul class="ob-tips"><li>계약서 4종은 <b>2부씩</b> 출력해 페이지 사이 <b>간인</b>과 서명란 <b>직인</b>을 찍어 주세요.</li>
+          <details class="ob-redo"><summary>서류별로 다시 받기 (잘못 출력한 서류만)</summary><div>${sealSteps(info).map((x) => `<button class="btn small" data-pdf="doc:${x.k}">${esc(x.t)} · ${x.n}부</button>`).join('')}</div></details>
+          <ul class="ob-tips"><li>[전체 서류 한 번에]에는 계약서가 <b>보관용 부수만큼</b> 이미 들어 있습니다. 프린터는 <b>1부·단면</b>으로 인쇄하세요.</li>
+            <li>계약서는 첫 장 <b>계인</b>, 모든 쪽 사이 <b>간인</b>, 서명란 <b>날인</b> 순서입니다. 자세한 위치는 날인 가이드를 보세요.</li>
             <li>개인 보안서약서는 대표자와 종업원 ${staffList(info).length || 1}명분이 들어 있습니다. 각자 서명·날인합니다.</li>
             <li>입금계좌 신고서의 &lt;신고인&gt; 칸과 인감 칸은 손으로 기재·날인합니다. 통장 인감과 같은 도장을 쓰세요.</li>
             ${info.doc_date ? '' : '<li>작성일을 비워 두어 날짜 칸이 빈칸입니다. 날인하는 날짜를 손으로 적어 주세요.</li>'}</ul>`

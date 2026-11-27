@@ -606,3 +606,6 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   88%, 100% { opacity: 0; transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) { .ag-flap { animation: none; transform: rotateX(179deg); } .ag-stamp.ag-stamp-ganin { animation: none; opacity: 1; } }
+.ob-redo { flex-basis: 100%; font-size: 13px; }
+.ob-redo summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.ob-redo div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

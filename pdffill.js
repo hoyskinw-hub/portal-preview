@@ -19,26 +19,31 @@ function wrap(font, text, size, maxW) {
   return out;
 }
 
-// plan: 출력할 원본 페이지 순서와 페이지별 값 덮어쓰기 [{ src, vals }]
-export function pagePlan(layout, data) {
-  const n = layout.pages.length;
-  const staffPages = [...new Set(layout.fields.filter((f) => f.k === 'name').map((f) => f.p))].sort((a, b) => a - b);
-  const { seal, guar } = layout.marks || {};
+// 인쇄용 묶음: 계약서는 부수만큼 이어서 넣고(보관용 표시), 나머지는 1부. 인쇄는 항상 1부·단면.
+export const COPY_LABELS = ['본사 보관용', '대리점 보관용', '연대보증인 보관용'];
+export function copiesOf(k, data) {
+  return ({ c_main: data.is_corp ? 3 : 2, c_fee: 2, c_ddc: 2, c_lease: 2 })[k] || 1;
+}
+// plan: 출력할 원본 쪽 순서 [{ src, vals, doc, copy, label }]
+//  opt.bundle: 부수 반영 / opt.only: 특정 서류 키만
+export function pagePlan(layout, data, opt = {}) {
+  const docs = [...(layout.docs || [])].sort((a, b) => a.from - b.from);
+  const staff = data.staff?.length ? data.staff : [{ name: '' }];
   const plan = [];
-  for (let i = 0; i < n; i++) {
-    if (staffPages.length && i === staffPages[0]) {
-      for (const st of data.staff?.length ? data.staff : [{ name: '' }]) for (const p of staffPages) plan.push({ src: p, vals: st });
-      continue;
-    }
-    if (staffPages.includes(i)) continue;
-    if (seal != null && guar != null && i >= seal && i < guar && !data.use_seal) continue;
-    if (guar != null && i >= guar && !data.is_corp) continue;
-    plan.push({ src: i, vals: {} });
+  for (const d of docs) {
+    if (d.k === 'f_seal' && !data.use_seal) continue;
+    if (d.k === 'f_guar' && !data.is_corp) continue;
+    if (opt.only && !opt.only.includes(d.k)) continue;
+    const range = Array.from({ length: d.to - d.from + 1 }, (_, i) => d.from + i);
+    if (d.k === 'f_secp') { for (const st of staff) for (const p of range) plan.push({ src: p, vals: st, doc: d.k, copy: 0, label: '' }); continue; }
+    const n = opt.bundle ? copiesOf(d.k, data) : 1;
+    for (let c = 0; c < n; c++) for (const p of range) plan.push({ src: p, vals: {}, doc: d.k, copy: c, label: n > 1 ? COPY_LABELS[c] : '' });
   }
+  if (!docs.length) for (let i = 0; i < layout.pages.length; i++) plan.push({ src: i, vals: {}, doc: '', copy: 0, label: '' });
   return plan;
 }
 
-export async function buildPdf(lib, tplBytes, layout, fontBytes, data, title = '') {
+export async function buildPdf(lib, tplBytes, layout, fontBytes, data, title = '', opt = {}) {
   const { PDFDocument, rgb, fontkit } = lib;
   const tpl = await PDFDocument.load(tplBytes);
   const out = await PDFDocument.create();
@@ -47,11 +52,16 @@ export async function buildPdf(lib, tplBytes, layout, fontBytes, data, title = '
   const black = rgb(0, 0, 0);
   const byPage = {};
   for (const f of layout.fields) (byPage[f.p] ||= []).push(f);
-  const plan = pagePlan(layout, data);
+  const plan = pagePlan(layout, data, opt);
   const pages = await out.copyPages(tpl, plan.map((x) => x.src));   // 한 번에 복사해야 글꼴·이미지가 중복되지 않음
   for (let i = 0; i < plan.length; i++) {
-    const { src, vals } = plan[i], pg = pages[i];
+    const { src, vals, label } = plan[i], pg = pages[i];
     out.addPage(pg);
+    if (label) {   // 계약서 보관용 표시 (오른쪽 위 여백)
+      const { width, height } = pg.getSize(), sz = 8.5, tw = font.widthOfTextAtSize(label, sz);
+      pg.drawRectangle({ x: width - tw - 34, y: height - 30, width: tw + 12, height: 15, borderColor: rgb(0.35, 0.35, 0.35), borderWidth: 0.6 });
+      pg.drawText(label, { x: width - tw - 28, y: height - 25.5, size: sz, font, color: rgb(0.2, 0.2, 0.2) });
+    }
     for (const f of byPage[src] || []) {
       const v = vals[f.k] ?? data[f.k];
       if (v == null || v === '') continue;
@@ -84,15 +94,17 @@ export async function buildPdf(lib, tplBytes, layout, fontBytes, data, title = '
   return out.save();
 }
 
-// 날인 가이드용: 출력 PDF에서 서류별 쪽 범위(1부터) { 키: { from, to } }
-export function docPages(layout, data, offset = 0) {
-  const plan = pagePlan(layout, data);
-  const owner = (src) => (layout.docs || []).find((d) => src >= d.from && src <= d.to)?.k;
+// 날인 가이드용: 출력 PDF에서 서류별 쪽 범위(1부터) { 키: { from, to, copies: [{ from, to, label }] } }
+export function docPages(layout, data, offset = 0, opt = {}) {
+  const plan = pagePlan(layout, data, opt);
   const out = {};
-  plan.forEach(({ src }, i) => {
-    const k = owner(src); if (!k) return;
+  plan.forEach(({ doc, copy, label }, i) => {
+    if (!doc) return;
     const n = offset + i + 1;
-    out[k] = out[k] ? { from: Math.min(out[k].from, n), to: Math.max(out[k].to, n) } : { from: n, to: n };
+    const d = out[doc] ||= { from: n, to: n, copies: [] };
+    d.from = Math.min(d.from, n); d.to = Math.max(d.to, n);
+    const c = d.copies[copy] ||= { from: n, to: n, label };
+    c.from = Math.min(c.from, n); c.to = Math.max(c.to, n);
   });
   return { pages: out, count: plan.length };
 }
