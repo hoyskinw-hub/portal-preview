@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=2bff35f';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=a22dc7e';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1817,7 +1817,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=2bff35f'), import('./docfill.js?v=2bff35f'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=a22dc7e'), import('./docfill.js?v=a22dc7e'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1941,10 +1941,13 @@ async function guideSlides(info, app) {
   const S = [];
   const cm = pages.c_main;
   if (cm) {
-    S.push({ kind: 'gyein', t: '계약서 첫 장 계인', p: cm.copies[0].from, p2: (cm.copies[1] || cm.copies[0]).from, sub: `양사 계약서 4종 공통 · 보관용 ${corp ? '3부(대리점 계약서)' : '2부'}의 첫 장에 걸쳐`,
-      s: [`보관용 ${corp ? '2~3부' : '2부'}를 조금 어긋나게 겹쳐 놓고, <b>모든 부의 첫 장에 걸치도록</b> 도장을 찍습니다.`, '대리점 계약서 · 특약서 2종 · 임대차 계약서 <b>4종 모두</b> 각각 합니다.'] });
+    S.push({ kind: 'gyein', t: '계약서 첫 장 계인', p: cm.copies[0].from, p2: (cm.copies[1] || cm.copies[0]).from, sub: `양사 계약서 4종 공통 · 보관용 ${corp ? '3부(대리점 계약서)' : '2부'}의 첫 장 경계에 반씩`,
+      s: ['보관용 계약서 첫 장을 <b>옆으로 나란히 맞대어</b> 놓고, <b>두 부의 경계에 도장이 반씩 걸치도록</b> 찍습니다.',
+        '위쪽은 본사(갑) 자리, <b>아래쪽이 대리점(을) 자리</b>입니다.' + (corp ? ' 3부면 1·2부 경계, 2·3부 경계에 각각 찍습니다.' : ''),
+        '대리점 계약서 · 특약서 2종 · 임대차 계약서 <b>4종 모두</b> 각각 합니다.'] });
     S.push({ kind: 'ganin', t: '계약서 쪽마다 간인', p: cm.from + 1, sub: '각 계약서의 모든 쪽 사이',
-      s: ['앞 쪽(예: 2쪽)의 <b>아래쪽을 위로 반 접어</b> 다음 쪽(3쪽)이 드러나게 하고, <b>접힌 선과 다음 쪽에 걸쳐</b> 도장을 찍습니다.', '1-2쪽, 2-3쪽 … 마지막 쪽까지 <b>모든 쪽 사이</b>에, 계약서 4종 · 2부 모두 합니다.'] });
+      s: ['앞 장(예: 2쪽)의 <b>아래쪽을 위로 접어</b> 다음 장(3쪽)이 드러나게 하고, <b>접힌 선에 도장이 반씩 걸치도록</b> 찍습니다.',
+        '왼쪽은 본사(갑) 자리, <b>오른쪽이 대리점(을) 자리</b>입니다.', '첫 장을 뺀 <b>모든 장</b>(1-2쪽, 2-3쪽 … 마지막 쪽까지)에, 계약서 4종 · 2부 모두 합니다.'] });
   }
   for (const x of sealSteps(info)) {
     const pg = pages[x.k]; if (!pg) continue;
@@ -1963,7 +1966,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=2bff35f')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=a22dc7e')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부의 첫 장에 걸쳐</span><span><b>간인</b> 쪽과 쪽 사이에 걸쳐</span></div>
@@ -1981,12 +1984,18 @@ function guideThenDownload(info, app, which) {
         root.querySelector('#agCap').innerHTML = `<b>${esc(x.t)}</b> <span class="muted">${esc(x.sub)}</span><ul>${x.s.map((t) => `<li>${t}</li>`).join('')}</ul>`;
         root.querySelector('#agPos').textContent = `${cur + 1} / ${S.length}`;
         const box = document.createElement('div'); box.className = 'ag-scene ag-' + x.kind;
-        const mk = (cls, left, top) => { const s = document.createElement('div'); s.className = 'ag-stamp ' + cls; s.textContent = '인'; s.style.left = left + 'px'; s.style.top = top + 'px'; return s; };
+        const mk = (cls, left, top) => { const s = document.createElement('div'); s.className = 'ag-stamp ' + cls; s.textContent = cls.includes('ghost') ? '본사' : '인'; s.style.left = left + 'px'; s.style.top = top + 'px'; return s; };
         if (x.kind === 'gyein') {
-          const w = Math.round(W * 0.74);
-          for (const k of [0, 1]) { const { c } = await pageCanvas(k ? x.p2 : x.p, w); const pw = document.createElement('div'); pw.className = 'ag-page ag-copy' + k; pw.style.left = (k * w * 0.32) + 'px'; pw.style.top = (k * 14) + 'px'; pw.append(c); box.append(pw); }
-          box.style.width = (w * 1.32) + 'px'; box.style.height = (w * 1.414 + 16) + 'px';
-          box.append(mk('big', w * 0.32 + w * 0.68 - 4, w * 0.36));
+          // 2부의 첫 장을 옆으로 맞대고 → 경계선에 본사(위)·대리점(아래) 도장이 반씩 걸침
+          const w = Math.round(Math.min(W * 0.62, 210)), h = Math.round(w * 1.414);
+          for (const k of [0, 1]) {
+            const { c } = await pageCanvas(k ? x.p2 : x.p, w); const pw = document.createElement('div'); pw.className = 'ag-page ag-side ag-side' + k;
+            pw.style.left = (k * w) + 'px'; pw.append(c);
+            const tag = document.createElement('div'); tag.className = 'ag-pgno'; tag.textContent = k ? '2부' : '1부'; pw.append(tag); box.append(pw);
+          }
+          box.style.width = (w * 2) + 'px'; box.style.height = h + 'px';
+          const seam = document.createElement('div'); seam.className = 'ag-seam'; seam.style.left = w + 'px'; box.append(seam);
+          box.append(mk('ghost', w, h * 0.43), mk('big', w, h * 0.58));
         } else if (x.kind === 'ganin') {
           // 3쪽 위에 2쪽을 겹쳐 두고 → 2쪽 오른쪽 절반을 앞으로 접어 → 접힌 가장자리와 3쪽에 걸쳐 도장
           const w = Math.round(W * 0.82), h = Math.round(w * 1.414);
@@ -2005,7 +2014,7 @@ function guideThenDownload(info, app, which) {
           flap.append(front, back);
           const lab2 = document.createElement('div'); lab2.className = 'ag-pgno ag-pgno-l'; lab2.textContent = `${x.p}쪽`; upper.append(lab2);
           top.append(upper, flap); box.append(under, top);
-          const s = mk('big ag-stamp-ganin', w * 0.84, h / 2 + 5); box.append(s);
+          box.append(mk('ghost ag-ghost-ganin', w * 0.4, h / 2), mk('big ag-stamp-ganin', w * 0.62, h / 2));
         } else {
           const { c, sz } = await pageCanvas(x.p, W);
           const pw = document.createElement('div'); pw.className = 'ag-page'; pw.append(c); box.append(pw);
@@ -2480,19 +2489,24 @@ async function cleanSeal(file) {
   return new Promise((res) => out.toBlob(res, 'image/png'));
 }
 
-// 계인·간인 자동 위치 (PDF 좌표, pt) — 계인: 첫 장 오른쪽 위 여백 / 간인: 2장 이상일 때 모든 장 오른쪽 끝 가운데(절반만 찍힘)
+// 계인·간인 자동 위치 (PDF 좌표, pt). 종이 계약서 방식을 그대로 옮김: 도장 하나를 두 장의 경계에 반씩
+//  · 계인: 첫 장 왼쪽 끝·오른쪽 끝(같은 높이, 대리점=을 자리라 가운데보다 아래)에 반쪽씩 → 출력한 2부를 옆으로 맞대면 하나의 도장
+//  · 간인: 쪽 경계마다 앞 장 아래 끝 + 다음 장 위 끝(같은 가로 위치, 대리점=을 자리라 오른쪽)에 반쪽씩 → 쪽을 위아래로 맞대면 하나의 도장
 function ctAutoMarks(sizes, on, w = 57) {
   if (!on || !sizes || sizes.length < 2) return [];
-  const n = sizes.length - 1, s1 = sizes[1];
-  const out = [{ t: '계인', p: 1, x: Math.round(s1.w - w * 1.15), y: Math.round(s1.h - w * 0.62), w }];
-  if (n >= 2) for (let p = 1; p <= n; p++) out.push({ t: '간인', p, x: Math.round(sizes[p].w), y: Math.round(sizes[p].h / 2), w });
+  const n = sizes.length - 1, s1 = sizes[1], gy = Math.round(s1.h * 0.42);
+  const out = [{ t: '계인', p: 1, x: 0, y: gy, w }, { t: '계인', p: 1, x: Math.round(s1.w), y: gy, w }];
+  for (let p = 1; p < n; p++) {
+    out.push({ t: '간인', p, x: Math.round(sizes[p].w * 0.62), y: 0, w });
+    out.push({ t: '간인', p: p + 1, x: Math.round(sizes[p + 1].w * 0.62), y: Math.round(sizes[p + 1].h), w });
+  }
   return out;
 }
 function ctMarkSummary(marks = []) {
   const k = (t) => marks.filter((m) => (m.t || '날인') === t);
-  const sign = k('날인');
+  const sign = k('날인'), gy = k('계인').length, gn = Math.ceil(k('간인').length / 2);
   return [sign.length ? `서명란 ${sign.length}곳(${[...new Set(sign.map((m) => m.p))].join(', ')}쪽)` : '',
-    k('계인').length ? '계인 1곳(첫 장)' : '', k('간인').length ? `간인 ${k('간인').length}곳(모든 장)` : ''].filter(Boolean).join(' · ');
+    gy ? '계인 1곳(첫 장 좌우 끝에 반씩)' : '', gn ? `간인 ${gn}곳(쪽 경계마다 반씩)` : ''].filter(Boolean).join(' · ');
 }
 
 // 서명란 자동 찾기: 문서에서 "(인)"·"(서명)"·"(날인)" 자리를 찾고, 가장 가까운 당사자 표시("을"·대리점명 vs "갑"·한국정보통신)로 대리점 쪽만 고른다
@@ -2547,7 +2561,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=2bff35f');
+  const V = await import('./viewer.js?v=a22dc7e');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2564,7 +2578,7 @@ async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, seal
       const el = document.createElement('div'); el.className = 'ct-mark' + (sealUrl ? ' seal' : '') + (m.t ? ' auto' : '');
       Object.assign(el.style, { left: `${(m.x - m.w / 2) * s}px`, top: `${(sz.h - m.y - m.w / 2) * s}px`, width: `${m.w * s}px`, height: `${m.w * s}px` });
       el.innerHTML = sealUrl ? `<img src="${esc(sealUrl)}" alt="">` : `<span>${m.t ? `대리점<br>${esc(m.t)}` : '대리점<br>날인'}</span>`;
-      if (m.t) el.title = m.t === '계인' ? '계인 — 첫 장 상단 (자동)' : '간인 — 쪽 오른쪽 끝, 절반만 찍힘 (자동)';
+      if (m.t) el.title = m.t === '계인' ? '계인 — 첫 장 좌우 끝에 반씩 (자동)' : '간인 — 쪽 경계에 반씩 (자동)';
       if (onMarkClick) el.onclick = (e) => { e.stopPropagation(); if (!m.t) onMarkClick(i); };
       wrap.appendChild(el);
     });
@@ -2662,7 +2676,7 @@ async function ctEditView(main) {
         <div class="ct-markinfo"><div class="ct-mkhead"><b>서명란 날인 <span id="mkCnt">${marks.length}</span>곳</b><button type="button" class="btn small" id="mkFind">서명란 자동 찾기</button></div>
           <p class="hint">PDF를 올리면 대리점 쪽 서명란 “(인)” 자리를 자동으로 찾아 표시합니다. 잘못 잡힌 표시는 눌러서 지우고, 빠진 곳은 문서에서 직접 누르면 추가됩니다.</p>
           <label class="ct-auto"><input type="checkbox" id="mkAuto" checked> 계인·간인 자동으로 찍기
-            <small>첫 장 오른쪽 위 계인 1곳 + (2장 이상이면) 모든 장 오른쪽 끝에 간인 — <span id="mkAutoCnt"></span></small></label>
+            <small>계인: 첫 장 좌우 끝에 반씩(2부를 옆으로 맞대면 하나) · 간인: 쪽 경계마다 앞 장 아래·다음 장 위에 반씩 — <span id="mkAutoCnt"></span></small></label>
           <label class="field inline"><span>도장 크기</span><select id="mkSize">${[[42, '작게 (1.5cm)'], [57, '보통 (2cm)'], [71, '크게 (2.5cm)']].map(([v, l]) => `<option value="${v}" ${v === 57 ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
         ${c?.status === 'rejected' && c.reject_reason ? `<div class="ct-warn"><b>대리점 수정 요청</b><br>${esc(c.reject_reason)}</div>` : ''}
         <div class="ct-btns"><button type="button" class="btn" id="ctSave">임시 저장</button><button class="btn primary" id="ctSend">대리점에 날인 요청</button></div>
@@ -2683,12 +2697,12 @@ async function ctEditView(main) {
     if (!sizes.length) { sizes = r.sizes; await draw(); } // 첫 표시 때 쪽 크기를 알고 나서 자동 위치 다시 그림
     const a = autoMarks();
     main.querySelector('#mkAutoCnt').textContent = main.querySelector('#mkAuto').checked
-      ? `계인 ${a.filter((m) => m.t === '계인').length}곳 · 간인 ${a.filter((m) => m.t === '간인').length}곳` : '사용 안 함';
+      ? (a.length ? ctMarkSummary(a) : '') : '사용 안 함';
     window.scrollTo(0, y);
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=2bff35f');
+    const V = await import('./viewer.js?v=a22dc7e');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
@@ -2698,15 +2712,17 @@ async function ctEditView(main) {
     await redraw();
   };
   main.querySelector('#mkFind').onclick = () => findSign(false).catch(fail);
+  f.querySelector('[name=agency_code]')?.addEventListener('change', () => { if (bytes) findSign(true).catch(() => {}); });
   main.querySelector('#mkAuto').onchange = redraw;
   main.querySelector('#mkSize').onchange = redraw;
   main.querySelector('#ctFile').onchange = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     if (!PDF_EXT.test(file.name)) { toast('PDF 파일만 올릴 수 있습니다.', true); e.target.value = ''; return; }
     newFile = file; bytes = new Uint8Array(await file.arrayBuffer()); marks = []; sizes = []; await redraw();
-    findSign(true).catch(() => {});
+    await findSign(true).catch(() => {});
   };
   await redraw();
+  if (bytes && !marks.length) await findSign(true).catch(() => {}); // 서명란이 비어 있으면 자동으로 찾아 둠
   const save = async (send) => {
     const v = form(f);
     if (!c && !v.agency_code) throw new Error('대리점을 선택하세요.');
@@ -3029,9 +3045,9 @@ const agNorm = (s) => String(s || '').toLowerCase().replace(/㈜|\(주\)|주식�
 const agMatch = (code, text, q) => !q || agNorm(code).startsWith(q) || agNorm(String(text).split(' · ').slice(1).join(' · ') || text).includes(q);
 function agSearchify(sel) {
   if (sel.dataset.enh) return; sel.dataset.enh = '1';
-  const box = document.createElement('div'); box.className = 'ag-combo';
+  const box = document.createElement('div'); box.className = 'agc-combo';
   const inp = document.createElement('input'); Object.assign(inp, { type: 'text', autocomplete: 'off', placeholder: '코드 또는 대리점명 입력' });
-  const list = document.createElement('div'); list.className = 'ag-list'; list.hidden = true;
+  const list = document.createElement('div'); list.className = 'agc-list'; list.hidden = true;
   sel.parentNode.insertBefore(box, sel); box.append(inp, list, sel);
   sel.hidden = true; sel.tabIndex = -1; if (sel.required) { sel.required = false; inp.required = true; }
   const label = () => (sel.value ? sel.selectedOptions[0]?.textContent || '' : '');
@@ -3041,8 +3057,8 @@ function agSearchify(sel) {
     hits = [...sel.options].filter((o) => o.value && agMatch(o.value, o.textContent, q));
     if (q) hits.sort((a, b) => (agNorm(b.value) === q) - (agNorm(a.value) === q));
     cur = Math.max(0, Math.min(cur, hits.length - 1));
-    list.innerHTML = hits.length ? hits.map((o, i) => `<div class="ag-item${i === cur ? ' on' : ''}${o.value === sel.value ? ' sel' : ''}" data-i="${i}">${esc(o.textContent)}</div>`).join('')
-      : '<div class="ag-none">일치하는 대리점이 없습니다</div>';
+    list.innerHTML = hits.length ? hits.map((o, i) => `<div class="agc-item${i === cur ? ' on' : ''}${o.value === sel.value ? ' sel' : ''}" data-i="${i}">${esc(o.textContent)}</div>`).join('')
+      : '<div class="agc-none">일치하는 대리점이 없습니다</div>';
     list.hidden = false;
     list.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
   };
@@ -3058,17 +3074,17 @@ function agSearchify(sel) {
   inp.onkeydown = (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (list.hidden) return draw(agNorm(inp.value));
       cur = (cur + (e.key === 'ArrowDown' ? 1 : -1) + hits.length) % Math.max(hits.length, 1);
-      list.querySelectorAll('.ag-item').forEach((el, i) => el.classList.toggle('on', i === cur)); list.querySelector('.on')?.scrollIntoView({ block: 'nearest' }); }
+      list.querySelectorAll('.agc-item').forEach((el, i) => el.classList.toggle('on', i === cur)); list.querySelector('.on')?.scrollIntoView({ block: 'nearest' }); }
     else if (e.key === 'Enter') { e.preventDefault(); if (!list.hidden) pick(hits[cur]); }
     else if (e.key === 'Escape') { list.hidden = true; inp.value = label(); inp.blur(); }
   };
   list.onmousedown = (e) => e.preventDefault(); // 입력칸 포커스 유지
   list.onclick = (e) => { e.preventDefault(); // <label> 안에 있을 때 클릭이 입력칸으로 다시 가지 않게
-    const it = e.target.closest('.ag-item'); if (it) pick(hits[+it.dataset.i]); };
+    const it = e.target.closest('.agc-item'); if (it) pick(hits[+it.dataset.i]); };
 }
 function agFilterify(pickBox) {
   if (pickBox.dataset.enh) return; pickBox.dataset.enh = '1';
-  const inp = document.createElement('input'); Object.assign(inp, { type: 'text', autocomplete: 'off', className: 'ag-filter', placeholder: '코드 또는 대리점명으로 찾기 (전체 선택·해제는 보이는 대리점에만 적용)' });
+  const inp = document.createElement('input'); Object.assign(inp, { type: 'text', autocomplete: 'off', className: 'agc-filter', placeholder: '코드 또는 대리점명으로 찾기 (전체 선택·해제는 보이는 대리점에만 적용)' });
   pickBox.parentNode.insertBefore(inp, pickBox);
   inp.oninput = () => { const q = agNorm(inp.value);
     pickBox.querySelectorAll('label').forEach((l) => { const c = l.querySelector('input'); l.hidden = !agMatch(c?.value, l.textContent, q); }); };
