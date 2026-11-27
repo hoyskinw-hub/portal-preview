@@ -1557,15 +1557,16 @@ const OB_INFO = [
     { k: 'col_amt', l: '담보 금액' }, { k: 'col_date', l: '설정 예정일', type: 'date' }] },
   { t: '보안서약서 대상 직원', hint: 'VAN 업무를 하는 직원 이름만 적어 주세요. 대표자를 포함해 1인 1부씩 개인 보안서약서가 출력됩니다. (신청서에는 들어가지 않습니다)', f: [],
     rows: { k: 'emps', n: 10, l: '직원 이름', cols: [['name', '이름']] } },
-  { t: '연대보증인', hint: '법인은 대표자, 개인사업자는 대표자 외 1인이 연대보증인이 되는 것이 일반적입니다. 대리점 계약서와 연대보증승락서에 들어갑니다.', guar: 1, f: [
-    { k: 'g_name', l: '이름', req: 1 }, { k: 'g_birth', l: '생년월일', type: 'date', req: 1 }, { k: 'g_addr', l: '주소', req: 1, wide: 1 }] },
+  { t: '연대보증인 (법인만)', hint: '법인 대리점만 대표자가 연대보증인이 됩니다. 대리점 계약서와 연대보증승락서에 들어갑니다. 개인사업자는 작성하지 않습니다.', guar: 1, f: [
+    { k: 'g_name', l: '이름', req: 1, corp: 1 }, { k: 'g_birth', l: '생년월일', type: 'date', req: 1, corp: 1 }, { k: 'g_addr', l: '주소', req: 1, wide: 1, corp: 1 }] },
   { t: '거래대금 입금계좌·거래 담당자', f: [
     { k: 'bank', l: '은행명', req: 1 }, { k: 'branch', l: '지점명' }, { k: 'holder', l: '예금주', req: 1 }, { k: 'account', l: '계좌번호', req: 1 },
     { k: 'mgr_dept', l: '담당 부서' }, { k: 'mgr_name', l: '담당자' }, { k: 'mgr_tel', l: '담당자 전화' },
     { k: 'use_seal', l: '법인인감 외 사용인감을 따로 씁니다 (사용인감계 추가)', type: 'check', wide: 1 }] },
   { t: '서류 작성일', hint: '비워 두면 날짜 칸이 빈칸으로 출력되어 날인할 때 손으로 적을 수 있습니다.', f: [{ k: 'doc_date', l: '신청서·계약서·서약서 작성일', type: 'date' }] },
 ];
-const OB_REQ = OB_INFO.flatMap((s) => s.f.filter((f) => f.req).map((f) => f.k));
+const OB_REQ_F = OB_INFO.flatMap((s) => s.f.filter((f) => f.req));
+const reqKeys = (d) => OB_REQ_F.filter((f) => !f.corp || d.corp_type === '법인').map((f) => f.k);
 
 // 고지사항 7문항 (여신전문금융업법 제16조의3 제2항)
 const OB_NOTICE = [
@@ -1585,14 +1586,14 @@ function mailItems(d = {}) {
   const L = [
     ['g', '작성·날인 서류 (포털에서 출력)'],
     ['apply', '대리점 개설 신청서', 1, '내용 확인 후 날인'],
-    ['c_main', '대리점 계약서', 2, '간인·직인, 연대보증인 날인'],
+    ['c_main', '대리점 계약서', 2, corp ? '간인·직인, 연대보증인(대표자) 날인' : '간인·직인'],
     ['c_fee', '가맹점관리수수료 및 DDC 지급수수료 관련 특약서', 2, '간인·직인'],
     ['c_lease', '신용카드조회기 임대차 계약서', 2, '간인·직인'],
     ['c_ddc', 'DDC 매출전표 투입업무 특약서', 2, '간인·직인'],
     ['f_bank', '거래처 등록 및 거래대금 입금계좌(인감) 신고서', 1, '인감 날인, 통장 인감과 동일'],
     ['f_sec', '보안서약서 (대리점용)', 1, '대표자 날인'],
     ['f_secp', '보안서약서 (개인용)', staff, '대표자 포함 VAN 업무 임직원 각자 서명'],
-    ['f_guar', '연대보증승락서', 1, '연대보증인 날인'],
+    ...(corp ? [['f_guar', '연대보증승락서', 1, '연대보증인(대표자) 날인']] : []),
     ...(d.use_seal ? [['f_seal', '사용인감계', 1, '사용인감 날인']] : []),
     ['notice', '가맹점모집인 등록신청인 고지사항', 1, '자필로 체크 후 서명·날인'],
     ['g', '발급·사본 서류'],
@@ -1603,9 +1604,8 @@ function mailItems(d = {}) {
     ['rep_reg', '대표자 주민등록표(등본)', 1, '', 1],
     ['rep_id', '대표자 신분증 사본', 1, '', 1],
     ['rep_seal', '대표자 인감증명서', 2, '', 1],
-    ['g_reg', '연대보증인 주민등록등본', 1, '', 1],
-    ['g_seal', '연대보증인 인감증명서', 1, '', 1],
-    ['g_tax', '연대보증인 재산세 과세 증명서', 1, '', 1],
+    ...(corp ? [['g_reg', '연대보증인(대표자) 주민등록등본', 1, '', 1], ['g_seal', '연대보증인(대표자) 인감증명서', 1, '', 1],
+      ['g_tax', '연대보증인(대표자) 재산세 과세 증명서', 1, '', 1]] : []),
     ...(corp ? [['corp_seal', '법인 인감증명서', 3, '', 1], ['corp_reg', '법인 등기사항전부증명서', 1, '', 1], ['corp_aoi', '법인 정관 사본', 1, '', 1]] : []),
   ];
   return L.map(([k, t, n, note, s]) => (k === 'g' ? { group: t } : { k, t, n, note, s: !!s }));
@@ -1627,7 +1627,7 @@ function docState(type, docs, files, info = {}) {
   const fl = files.filter((x) => x.doc_key === type.key);
   const d = doc?.data || {};
   let done, required = type.required;
-  if (type.key === 'apply') done = OB_REQ.every((k) => String(d[k] ?? '').trim());
+  if (type.key === 'apply') done = reqKeys(d).every((k) => String(d[k] ?? '').trim());
   else if (type.key === 'notice') done = OB_NOTICE.every((_, i) => d[`q${i + 1}`]);
   else if (type.key === 'mail') done = !!d.sent;
   else if (type.kind === 'form') done = !!doc;
@@ -1646,127 +1646,64 @@ function docChip(st2, editable) {
   return st2.done ? '<span class="ob-chip done">준비 완료</span>' : `<span class="ob-chip">${editable ? '미완료' : '미제출'}</span>`;
 }
 
-// ---------- Word 자동 작성 ----------
-let docLibs = null;
-async function docxLibs() {
-  if (!docLibs) {
-    const [z, d, f] = await Promise.all([import('https://esm.sh/pizzip@3.3.0'), import('https://esm.sh/docxtemplater@3.71.1'), import('./docfill.js')]);
-    docLibs = { PizZip: z.default, Docxtemplater: d.default, ...f };
+// ---------- 서류 PDF 자동 작성 (원본 양식 PDF 위에 값을 채움) ----------
+let pdfLibs = null;
+async function pdfKit() {
+  if (!pdfLibs) {
+    const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
+      import('./pdffill.js'), import('./docfill.js'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+    pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
-  return docLibs;
+  return pdfLibs;
+}
+const tplCache = {};
+async function tplFile(name, type) {
+  if (!tplCache[name]) {
+    const { data, error } = await sb.storage.from(BUCKET).download(`templates/${name}`);
+    if (error) throw new Error('양식 파일을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    tplCache[name] = type === 'json' ? JSON.parse(await data.text()) : await data.arrayBuffer();
+  }
+  return tplCache[name];
 }
 function saveBlob(blob, name) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
-async function makeDoc(which, info, app) {
-  const L = await docxLibs();
-  const { data: blob, error } = await sb.storage.from(BUCKET).download(`templates/${which}.docx`);
-  if (error) throw new Error('양식 파일을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+// which: apply(개설 신청서) | forms(계약서·신고서·서약서) | all(전체 + 고지사항 원본)
+async function makePdf(which, info, app) {
+  const K = await pdfKit();
   const sub = app.submitted_at ? new Date(app.submitted_at) : null;
-  const data = L.docData(info, { appNo: app.id, recvDate: sub ? `${sub.getFullYear()}.  ${sub.getMonth() + 1}.  ${sub.getDate()}.` : undefined });
-  const out = L.fillDocx(L.PizZip, L.Docxtemplater, await blob.arrayBuffer(), data);
+  const data = K.docData(info, { appNo: app.id, recvDate: sub ? `${sub.getFullYear()}. ${sub.getMonth() + 1}. ${sub.getDate()}.` : undefined });
+  const build = async (n) => K.buildPdf(K.lib, await tplFile(`${n}.pdf`), await tplFile(`${n}.json`, 'json'), K.font, data);
   const nm = (info.agency || '대리점').replace(/[\\/:*?"<>|]/g, '');
-  saveBlob(out, `${which === 'apply' ? '대리점 개설 신청서' : '계약서·신고서·서약서 일체'}_${nm}.docx`);
+  let bytes, title;
+  if (which === 'all') {
+    const out = await K.lib.PDFDocument.create();
+    for (const src of [await build('apply'), await build('forms'), await tplFile('notice.pdf')]) {
+      const d = await K.lib.PDFDocument.load(src);
+      (await out.copyPages(d, d.getPageIndices())).forEach((p) => out.addPage(p));
+    }
+    out.setTitle(`개설 서류 일체_${nm}`);
+    bytes = await out.save(); title = `개설 서류 일체_${nm}.pdf`;
+  } else {
+    bytes = await build(which);
+    title = `${which === 'apply' ? '대리점 개설 신청서' : '계약서·신고서·서약서'}_${nm}.pdf`;
+  }
+  saveBlob(new Blob([bytes], { type: 'application/pdf' }), title);
 }
 async function openNoticePdf() {
   const { data, error } = await sb.storage.from(BUCKET).createSignedUrl('templates/notice.pdf', 600);
   if (error) return fail(error);
   window.open(data.signedUrl, '_blank');
 }
-// 개설 신청서 PDF 출력: Word 양식과 같은 디자인의 A4 2쪽 인쇄 화면 → [PDF로 저장] 또는 바로 인쇄
-async function printApplyPdf(info, app) {
-  const w = window.open('', '_blank');
-  if (!w) return toast('팝업이 차단됐습니다. 브라우저에서 팝업을 허용해 주세요.', true);
-  w.document.write('<p style="font-family:sans-serif;padding:20px">신청서를 만드는 중…</p>');
-  const L = await import('./docfill.js');
-  const sub = app.submitted_at ? new Date(app.submitted_at) : null;
-  const o = L.docData(info, { appNo: app.id, recvDate: sub ? `${sub.getFullYear()}. ${sub.getMonth() + 1}. ${sub.getDate()}.` : '20　 .　 .　 .' });
-  const e = (k) => esc(o[k] ?? '');
-  const nl = (k) => esc(o[k] ?? '').replace(/\n/g, '<br>');
-  const kv = (rows) => `<table class="t kv">${rows.map((r) => `<tr>${r[2] === undefined
-    ? `<th>${r[0]}</th><td colspan="3">${r[1]}</td>` : `<th>${r[0]}</th><td>${r[1]}</td><th>${r[2]}</th><td>${r[3]}</td>`}</tr>`).join('')}</table>`;
-  const rng = (n, f) => Array.from({ length: n }, (_, i) => f(i + 1)).join('');
-  const title = `대리점 개설 신청서_${(info.agency || '').replace(/[\\/:*?"<>|]/g, '')}`;
-  w.document.open();
-  w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
-  @page { size: A4; margin: 13mm 15mm 12mm; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', sans-serif; color: #000; font-size: 9.5pt; line-height: 1.35;
-         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .page { width: 180mm; margin: 0 auto; }
-  .page + .page { break-before: page; }
-  h1 { text-align: center; font-size: 18pt; letter-spacing: .5em; margin: 2mm 0 0; padding-bottom: 3mm; border-bottom: 3px double #000; }
-  .meta { width: 110mm; margin: 4mm 0 0 auto; }
-  h2 { font-size: 10.5pt; margin: 4.5mm 0 1.5mm; }
-  h2 small, h3 small { font-weight: 400; font-size: 8pt; color: #595959; }
-  h3 { font-size: 8.5pt; margin: 2.5mm 0 1mm; }
-  table.t { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .t th, .t td { border: 1px solid #000; padding: 1.2mm 1.8mm; height: 7mm; vertical-align: middle; word-break: keep-all; overflow-wrap: anywhere; }
-  .t th { background: #f2f2f2; font-weight: 700; font-size: 8.8pt; text-align: center; }
-  .kv th { width: 26mm; } .c { text-align: center; } .r { text-align: right; }
-  .plan td { height: 34mm; vertical-align: top; }
-  .sign { text-align: center; margin-top: 7mm; font-size: 10.5pt; }
-  .sign .d { margin-top: 3.5mm; font-size: 10pt; }
-  .sign .who { text-align: right; margin-top: 4mm; font-size: 10pt; }
-  .sign .who b { font-size: 10.5pt; }
-  .sign .to { margin-top: 5mm; font-size: 13pt; font-weight: 700; }
-  .hq th { width: 26mm; } .hq td { height: 19mm; }
-  .tool { position: sticky; top: 0; background: #f6f6f6; border-bottom: 1px solid #ddd; padding: 10px; text-align: center; font-family: sans-serif; font-size: 13px; }
-  .tool button { font-size: 14px; padding: 7px 18px; margin-right: 8px; cursor: pointer; }
-  @media screen { body { background: #e9e9e9; } .page { background: #fff; padding: 13mm 15mm; width: 210mm; min-height: 297mm; margin: 12px auto; box-shadow: 0 1px 6px rgba(0,0,0,.2); } }
-  @media print { .tool { display: none; } }
-  </style></head><body>
-  <div class="tool"><button onclick="print()">🖨 인쇄 / PDF로 저장</button>인쇄 창의 대상에서 <b>'PDF로 저장'</b>을 고르면 PDF 파일로 저장됩니다.</div>
-  <div class="page">
-    <h1>대리점 개설 신청서</h1>
-    <table class="t meta"><tr><th style="width:22mm">신청번호</th><td class="c">${e('app_no')}</td><th style="width:22mm">접수일자</th><td class="c" style="width:38mm">${e('recv_date')}</td></tr></table>
-    <h2>1. 사업자 정보</h2>
-    ${kv([['상호', e('agency'), '사업자등록번호', e('bizno')], ['대표자', e('rep'), '사업자 구분', `${e('corp_p')} 개인 &nbsp;&nbsp; ${e('corp_c')} 법인`],
-      ['사업장 주소', e('addr_full')], ['대표번호', e('tel'), '휴대폰', e('mobile')], ['FAX', e('fax'), '이메일', e('email')],
-      ['홈페이지', e('homepage'), '개업연월일', e('open_date')], ['업태', e('biz_type'), '종목', e('biz_item')],
-      ['사무실', `${e('own_self')} 자가 &nbsp;&nbsp; ${e('own_rent')} 임차`, '종업원 수', `${e('emp_cnt')} 명`]])}
-    <h2>2. 영업 현황 <small>(취급 중인 솔루션과 VAN 실적)</small></h2>
-    <table class="t"><colgroup><col style="width:34mm"><col style="width:58mm"><col></colgroup>
-      <tr><th>구분</th><th>솔루션명</th><th>주요 가맹점 · 규모</th></tr>
-      ${rng(5, (i) => `<tr><td class="c">${e(`s${i}_cat`)}</td><td>${e(`s${i}_name`)}</td><td>${e(`s${i}_mer`)}</td></tr>`)}</table>
-    <h3>인원 현황</h3>
-    <table class="t"><tr>${[['영업', 'org_sales'], ['지원', 'org_support'], ['개발', 'org_dev'], ['외부영업', 'org_ext']].map(([l, k]) => `<th>${l}</th><td class="c">${e(k)} 명</td>`).join('')}</tr></table>
-    <h3>실적 현황 및 KICC 실적 계획</h3>
-    <table class="t"><colgroup><col style="width:30mm"><col><col><col></colgroup>
-      <tr><th>구분</th><th>VAN사 / 연도</th><th>실적 건수 (건)</th><th>실적 금액 (백만원)</th></tr>
-      ${rng(3, (i) => `<tr>${i === 1 ? '<th rowspan="3">보유 실적</th>' : ''}<td class="c">${e(`v${i}_name`)}</td><td class="r">${e(`v${i}_cnt`)}</td><td class="r">${e(`v${i}_amt`)}</td></tr>`)}
-      ${rng(3, (i) => `<tr>${i === 1 ? '<th rowspan="3">KICC 계획</th>' : ''}<td class="c">${e(`y${i}`)}년</td><td class="r">${e(`p${i}_cnt`)}</td><td class="r">${e(`p${i}_amt`)}</td></tr>`)}</table>
-  </div>
-  <div class="page">
-    <h2>3. 사업 계획 <small>(참여 동기, 영업 전략, 목표 가맹점 등)</small></h2>
-    <table class="t plan"><tr><td>${nl('plan_text')}</td></tr></table>
-    <h2>4. 대표자 정보 <small>(실제 대표자 기준)</small></h2>
-    ${kv([['성명', e('cv_name'), '생년월일', e('cv_birth_kr')], ['주소', e('cv_addr')]])}
-    <h3>주요 경력 (VAN 경력 위주, 없으면 현재 사업)</h3>
-    <table class="t"><colgroup><col style="width:30mm"><col><col style="width:35mm"></colgroup><tr><th>기간</th><th>경력 사항</th><th>비고</th></tr>
-      ${rng(5, (i) => `<tr><td class="c">${e(`c${i}_ym`)}</td><td>${e(`c${i}_t`)}</td><td>${e(`c${i}_n`)}</td></tr>`)}</table>
-    <h2>5. 담보 제공 계획</h2>
-    ${kv([['담보 종류', `${e('col_ins')} 보증보험 증권 &nbsp;&nbsp; ${e('col_etc')} 기타 ${e('col_note')}`], ['담보 금액', e('col_amt'), '설정 예정일', e('col_date')]])}
-    <div class="sign">위와 같이 한국정보통신㈜ 대리점 개설을 신청합니다.
-      <div class="d">${e('date')}</div>
-      <div class="who">신 청 인 : &nbsp;<b>${e('agency')}</b> &nbsp;&nbsp;&nbsp;&nbsp; 대표자 : &nbsp;<b>${e('rep')}</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (인)</div>
-      <div class="to">한국정보통신주식회사 &nbsp;귀중</div></div>
-    <h2>6. 본사 검토 <small>(본사 기재란)</small></h2>
-    <table class="t hq">${['담 당', '팀 장', '본 부 장'].map((l) => `<tr><th>${l}</th><td></td></tr>`).join('')}</table>
-  </div></body></html>`);
-  w.document.close();
-}
-
 function bindMakeDocs(root, info, app) {
-  root.querySelectorAll('[data-mk]').forEach((b) => b.onclick = async () => {
-    const t = b.textContent; b.disabled = true; b.textContent = '만드는 중…';
-    try { await makeDoc(b.dataset.mk, info, app); toast('Word 파일을 내려받았습니다.'); } catch (e) { fail(e); }
-    b.disabled = false; b.textContent = t;
+  root.querySelectorAll('[data-pdf]').forEach((b) => b.onclick = async () => {
+    const t = b.innerHTML; b.disabled = true; b.textContent = 'PDF 만드는 중…';
+    try { await makePdf(b.dataset.pdf, info, app); toast('PDF를 내려받았습니다.'); } catch (e) { fail(e); }
+    b.disabled = false; b.innerHTML = t;
   });
   root.querySelectorAll('[data-npdf]').forEach((b) => b.onclick = openNoticePdf);
-  root.querySelectorAll('[data-apdf]').forEach((b) => b.onclick = () => printApplyPdf(info, app));
   root.querySelectorAll('[data-mlist]').forEach((b) => b.onclick = () => printMailList(info, app));
 }
 function staffList(d) {
@@ -1834,17 +1771,18 @@ function viewInfoEdit(main, app, doc) {
     <div class="ob-banner info"><b>대리점 개설 신청서</b>와 같은 순서입니다. <b class="req-mark">*</b> 표시만 채우면 제출할 수 있고, 나머지도 채울수록 신청서가 완성됩니다.
       입력한 내용은 계약서·신고서·서약서에도 자동으로 들어갑니다.</div>
     <form id="infoForm" class="ob-info">${OB_INFO.map((s) => `<section class="card ob-sec"><h3>${esc(s.t)}</h3>${s.hint ? `<p class="hint">${esc(s.hint)}</p>` : ''}
-      ${s.guar ? '<div class="ob-guar"><button type="button" class="btn small" id="guarRep">대표자 정보로 채우기 (이력서의 생년월일·주소)</button> <span class="muted" id="guarMsg"></span></div>' : ''}
+      ${s.guar ? '<div class="ob-guar"><button type="button" class="btn small" id="guarRep">대표자 정보로 채우기 (이력서의 생년월일·주소)</button> </div>' : ''}
       <div class="ob-form">${s.f.map((f) => infoField(f, d)).join('')}</div>
       ${[s.rows, ...(s.rows2 || [])].filter(Boolean).map((r) => infoRows(r, d)).join('')}</section>`).join('')}
-      <div class="ob-submit"><div>저장 후 [개설 신청] 화면에서 Word 서류를 내려받을 수 있습니다.</div><button class="btn primary">저장</button></div></form>`;
+      <div class="ob-submit"><div>저장 후 [개설 신청] 화면에서 서류를 PDF로 내려받을 수 있습니다.</div><button class="btn primary">저장</button></div></form>`;
   const f = main.querySelector('#infoForm');
   const back = () => { st.obEdit = null; render(); };
   main.querySelector('#back').onclick = () => { if (confirm('저장하지 않은 내용은 사라집니다. 나갈까요?')) back(); };
   main.querySelector('#saveTop').onclick = () => f.requestSubmit();
-  const guarCheck = () => {
-    const v = readInfo(f), msg = main.querySelector('#guarMsg');
-    msg.textContent = v.corp_type === '개인' && v.g_name && v.g_name === v.rep ? '개인사업자는 보통 대표자 외 1인이 연대보증인입니다.' : '';
+  const guarSec = main.querySelector('#guarRep')?.closest('section');
+  const guarCheck = () => {   // 연대보증인 칸은 법인일 때만 보임
+    const v = readInfo(f);
+    if (guarSec) guarSec.hidden = v.corp_type !== '법인';
   };
   f.addEventListener('change', guarCheck); guarCheck();
   main.querySelector('#guarRep').onclick = () => {
@@ -1853,7 +1791,8 @@ function viewInfoEdit(main, app, doc) {
   f.onsubmit = async (e) => {
     e.preventDefault();
     const v = readInfo(f);
-    const miss = OB_INFO.flatMap((s) => s.f.filter((x) => x.req && !String(v[x.k] ?? '').trim()).map((x) => x.l));
+    if (v.corp_type !== '법인') Object.assign(v, { g_name: '', g_birth: '', g_addr: '' });
+    const miss = OB_REQ_F.filter((x) => reqKeys(v).includes(x.k) && !String(v[x.k] ?? '').trim()).map((x) => x.l);
     try {
       const r = doc ? await sb.from('onboard_docs').update({ data: v }).eq('id', doc.id)
                     : await sb.from('onboard_docs').insert({ app_id: app.id, doc_key: 'apply', data: v });
@@ -1942,10 +1881,10 @@ async function viewOnboard(main) {
         ${editable ? `<button class="btn ${S.notice.done ? '' : 'primary'} small" data-notice>${S.notice.doc ? '다시 확인' : '확인하기'}</button>` : ''}
         <button class="btn small" data-npdf>📄 원본 양식(PDF) 출력</button>`)}
       <article class="ob-doc"><div class="ob-doc-head"><span class="ob-num">3</span><div class="ob-doc-t"><b>서류 자동 작성 · 출력</b>
-          <div class="ob-desc">기본 정보가 원본 양식에 채워진 Word 파일을 내려받아 출력하고 날인합니다.</div></div></div>
-        <div class="ob-doc-body">${S.apply.doc ? `<button class="btn small primary" data-apdf>🖨 개설 신청서 PDF·출력</button>
-          <button class="btn small" data-mk="apply">📝 개설 신청서 (Word)</button>
-          <button class="btn small primary" data-mk="forms">📑 계약서·신고서·서약서 일체 (Word)</button>
+          <div class="ob-desc">기본 정보가 원본 양식에 채워진 PDF를 내려받아 출력하고 날인합니다.</div></div></div>
+        <div class="ob-doc-body">${S.apply.doc ? `<button class="btn small primary" data-pdf="all">⬇ 전체 서류 한 번에 (PDF)</button>
+          <button class="btn small" data-pdf="apply">개설 신청서</button>
+          <button class="btn small" data-pdf="forms">계약서·신고서·서약서</button>
           <ul class="ob-tips"><li>계약서 4종은 <b>2부씩</b> 출력해 페이지 사이 <b>간인</b>과 서명란 <b>직인</b>을 찍어 주세요.</li>
             <li>개인 보안서약서는 대표자와 종업원 ${staffList(info).length || 1}명분이 들어 있습니다. 각자 서명·날인합니다.</li>
             <li>입금계좌 신고서의 &lt;신고인&gt; 칸과 인감 칸은 손으로 기재·날인합니다. 통장 인감과 같은 도장을 쓰세요.</li>
@@ -2049,7 +1988,7 @@ async function viewOnboardDetail(main) {
   const body = (x) => {
     const k = x.t.key;
     if (k === 'apply') return x.doc ? `<details class="ob-det"><summary>입력 내용 보기 — ${esc(info.corp_type || '')}사업자 · 연대보증인 ${esc(info.g_name || '-')}</summary><table class="tbl ob-vals">${infoTable(info)}</table></details>
-      <button class="btn small primary" data-apdf>🖨 개설 신청서 PDF·출력</button> <button class="btn small" data-mk="apply">📝 신청서 (Word)</button> <button class="btn small" data-mk="forms">📑 계약서·서약서 일체 (Word)</button>` : '<div class="muted">아직 작성하지 않았습니다.</div>';
+      <button class="btn small primary" data-pdf="apply">⬇ 개설 신청서 PDF (결재용)</button> <button class="btn small" data-pdf="forms">계약서·신고서·서약서 PDF</button>` : '<div class="muted">아직 작성하지 않았습니다.</div>';
     if (k === 'notice') return nd ? `<ol class="ob-q small">${OB_NOTICE.map((q, i) => `<li class="${yes[i] ? 'bad' : ''}"><div>${esc(q)}</div><b>${esc(nd[`q${i + 1}`] || '-')}</b></li>`).join('')}</ol>` : '<div class="muted">아직 확인하지 않았습니다.</div>';
     if (k === 'mail') return x.doc?.data?.sent ? `<div class="ob-sum">${esc(x.doc.data.date || '')} 발송${x.doc.data.tracking ? ` · 등기번호 ${esc(x.doc.data.tracking)}` : ''}</div>` : '<div class="muted">아직 발송 표시가 없습니다.</div>';
     return x.files.length ? commonFilesHtml(x.files) : '<div class="muted">첨부 없음</div>';

@@ -52,6 +52,10 @@ export function docData(d, opt = {}) {
     use_seal: !!d.use_seal,
     staff: (staffList(d).length ? staffList(d) : ['']).map((name) => ({ name, agency: s(d.agency), date: krDate(d.doc_date) })),
   };
+  // PDF 출력용: 작성일 칸(년·월·일), 법인 여부(연대보증은 법인만)
+  const dm_ = s(d.doc_date).match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  Object.assign(o, { dy: dm_ ? dm_[1] : '', dm: dm_ ? String(Number(dm_[2])) : '', dd: dm_ ? String(Number(dm_[3])) : '', is_corp: d.corp_type === '법인' });
+  if (!o.is_corp) Object.assign(o, { g_name: '', g_addr: '', g_birth: '' });
   // 간소화 신청서(v2) 항목
   Object.assign(o, {
     app_no: s(opt.appNo), addr_full: s(d.zip) ? `(${s(d.zip)}) ${s(d.addr)}` : s(d.addr),
