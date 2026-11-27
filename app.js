@@ -1768,7 +1768,7 @@ async function guideSlides(info, app) {
     S.push({ kind: 'gyein', t: '계약서 첫 장 계인', p: cm.from, sub: '양사 계약서 4종 공통 · 2부의 첫 장에 걸쳐',
       s: ['계약서 2부를 조금 어긋나게 겹쳐 놓고, <b>두 부의 첫 장에 걸치도록</b> 도장을 찍습니다.', '대리점 계약서 · 특약서 2종 · 임대차 계약서 <b>4종 모두</b> 각각 합니다.'] });
     S.push({ kind: 'ganin', t: '계약서 쪽마다 간인', p: cm.from + 1, sub: '각 계약서의 모든 쪽 사이',
-      s: ['앞 쪽(예: 2쪽)을 <b>반으로 접어</b> 다음 쪽(3쪽) 위에 올리고, <b>접힌 가장자리와 다음 쪽에 걸쳐</b> 도장을 찍습니다.', '1-2쪽, 2-3쪽 … 마지막 쪽까지 <b>모든 쪽 사이</b>에, 계약서 4종 · 2부 모두 합니다.'] });
+      s: ['앞 쪽(예: 2쪽)의 <b>아래쪽을 위로 반 접어</b> 다음 쪽(3쪽)이 드러나게 하고, <b>접힌 선과 다음 쪽에 걸쳐</b> 도장을 찍습니다.', '1-2쪽, 2-3쪽 … 마지막 쪽까지 <b>모든 쪽 사이</b>에, 계약서 4종 · 2부 모두 합니다.'] });
   }
   for (const x of sealSteps(info)) {
     const pg = pages[x.k]; if (!pg) continue;
@@ -1817,15 +1817,16 @@ function guideThenDownload(info, app, which) {
           const under = document.createElement('div'); under.className = 'ag-page ag-under'; under.style.left = '10px'; under.style.top = '10px'; under.append(p3.c);
           const lab3 = document.createElement('div'); lab3.className = 'ag-pgno'; lab3.textContent = `${x.p + 1}쪽`; under.append(lab3);
           const top = document.createElement('div'); top.className = 'ag-top'; top.style.width = w + 'px'; top.style.height = h + 'px';
-          const half = (cls, pos) => { const d = document.createElement('div'); d.className = cls; d.style.width = (w / 2) + 'px'; d.style.height = h + 'px';
+          // 2쪽 아래쪽 절반을 위로 접어 올림 → 접힌 선(가운데)과 3쪽에 걸쳐 도장
+          const half = (cls, pos) => { const d = document.createElement('div'); d.className = cls; d.style.width = w + 'px'; d.style.height = (h / 2) + 'px';
             d.style.backgroundImage = `url(${img2})`; d.style.backgroundSize = `${w}px ${h}px`; d.style.backgroundPosition = pos; return d; };
-          const left = half('ag-half ag-left', '0 0');
-          const flap = document.createElement('div'); flap.className = 'ag-flap'; flap.style.width = (w / 2) + 'px'; flap.style.height = h + 'px'; flap.style.left = (w / 2) + 'px';
-          const front = half('ag-face ag-front', `-${w / 2}px 0`); const back = document.createElement('div'); back.className = 'ag-face ag-back';
+          const upper = half('ag-half ag-upper', '0 0');
+          const flap = document.createElement('div'); flap.className = 'ag-flap'; flap.style.width = w + 'px'; flap.style.height = (h / 2) + 'px'; flap.style.top = (h / 2) + 'px';
+          const front = half('ag-face ag-front', `0 -${h / 2}px`); const back = document.createElement('div'); back.className = 'ag-face ag-back';
           flap.append(front, back);
-          const lab2 = document.createElement('div'); lab2.className = 'ag-pgno ag-pgno-l'; lab2.textContent = `${x.p}쪽`; left.append(lab2);
-          top.append(left, flap); box.append(under, top);
-          const s = mk('big ag-stamp-ganin', w / 2 + 10, h * 0.42); box.append(s);
+          const lab2 = document.createElement('div'); lab2.className = 'ag-pgno ag-pgno-l'; lab2.textContent = `${x.p}쪽`; upper.append(lab2);
+          top.append(upper, flap); box.append(under, top);
+          const s = mk('big ag-stamp-ganin', w * 0.84, h / 2 + 5); box.append(s);
         } else {
           const { c, sz } = await pageCanvas(x.p, W);
           const pw = document.createElement('div'); pw.className = 'ag-page'; pw.append(c); box.append(pw);
