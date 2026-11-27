@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=a054587';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=3807246';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -29,7 +29,7 @@ let menuOff = new Set();  // 대리점: 본사가 꺼 둔 메뉴 (agency_menus)
 const MENU_DEFS = [['notices', '공지사항'], ['library', '자료실'], ['faq', 'FAQ'], ['board', '1:1 문의'], ['contracts', '전자계약', '대표자만'], ['myagency', '우리 대리점', '대표자만']];
 const menuOn = (k) => isAdmin() || !menuOff.has(k);
 const ST0 = { tab: 'home', agency: null, filter: 'all', postId: null, compose: false,
-             q: '', gq: '', obId: null, obEdit: null, obFilter: 'active', faqCat: '전체', faqQ: '', faqOpen: null, noticeId: null, noticeEdit: null, libCat: null, libPage: null, libEdit: null, libQ: '', ctId: null, ctEdit: null, ctFilter: 'todo' };
+             q: '', gq: '', obId: null, obEdit: null, obFilter: 'active', faqCat: '전체', faqQ: '', faqOpen: null, noticeId: null, noticeEdit: null, libCat: null, libPage: null, libEdit: null, libQ: '', ctId: null, ctEdit: null, ctFilter: null };
 const st = { ...ST0 };
 // 로그인/로그아웃 때 보던 화면을 모두 지우고 첫 화면(공지사항)부터
 function resetAll() { Object.assign(st, ST0); booted = false; me = null; libOpen.clear(); window.scrollTo(0, 0); }
@@ -307,7 +307,7 @@ async function render() {
       <div class="who"><span>${whoName}</span><button class="btn small" id="logout">로그아웃</button></div>
     </div>
     <nav class="tabs">${tabs.map(([k, l, c]) => `<button class="tab ${st.tab === k ? 'on' : ''}" data-tab="${k}">${l}${c ? `<span class="cnt">${c}</span>` : ''}</button>`).join('')}
-      ${isAdmin() ? `<button class="tab hq-btn ${inHq ? 'on' : ''}" id="hqBtn" aria-expanded="${inHq || st.hqOpen ? 'true' : 'false'}">🛠 본사 관리${hqSum ? `<span class="cnt">${hqSum}</span>` : ''}<span class="hq-caret">▾</span></button>` : ''}</nav>
+      ${isAdmin() ? `<button class="tab hq-btn ${inHq ? 'on' : ''}" id="hqBtn" aria-expanded="${inHq || st.hqOpen ? 'true' : 'false'}">🛠 <span class="hq-word">본사 </span>관리${hqSum ? `<span class="cnt">${hqSum}</span>` : ''}<span class="hq-caret">▾</span></button>` : ''}</nav>
     ${isAdmin() ? `<nav class="hq-sub" id="hqSub" ${inHq || st.hqOpen ? '' : 'hidden'}><div class="hq-sub-in"><span class="hq-lab">본사 관리</span>${HQ_TABS.map(([k, l, ic, c]) =>
       `<button class="hq-item ${st.tab === k ? 'on' : ''}" data-tab="${k}"><span class="hq-ic">${ic}</span>${l}${c ? `<span class="cnt">${c}</span>` : ''}</button>`).join('')}</div></nav>` : ''}
     </header>
@@ -1928,7 +1928,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=a054587'), import('./docfill.js?v=a054587'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=3807246'), import('./docfill.js?v=3807246'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2079,7 +2079,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=a054587')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=3807246')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2719,7 +2719,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=a054587');
+  const V = await import('./viewer.js?v=3807246');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2774,11 +2774,12 @@ async function ctListHq(main) {
     sb.from('contracts').select('id,agency_code,title,kind,status,updated_at').order('updated_at', { ascending: false }),
     sb.from('agency_seals').select('*').order('registered_at', { ascending: false })]);
   if (error) throw error;
-  const f = st.ctFilter || 'todo';
   const groups = { todo: (c) => ['agency_signed', 'rejected', 'draft'].includes(c.status), sent: (c) => c.status === 'sent',
     done: (c) => c.status === 'completed', all: () => true };
-  const shown = list.filter(groups[f]);
   const cnt = (k) => list.filter(groups[k]).length;
+  // 처음 열 때: 처리할 일이 없으면 진행 중(대리점 날인 대기) → 전체 순으로 내용이 있는 탭을 보여 줌
+  const f = st.ctFilter || (cnt('todo') ? 'todo' : cnt('sent') ? 'sent' : 'all');
+  const shown = list.filter(groups[f]);
   const pend = (seals || []).filter((s) => s.status === 'pending');
   main.innerHTML = `<div class="ct">
     <div class="lib-head"><h2>전자계약</h2><button class="btn primary" id="ctNew">+ 새 계약 (PDF 올리기)</button>
@@ -2790,7 +2791,7 @@ async function ctListHq(main) {
         <div class="ct-btns"><button class="btn small primary" data-sok="${esc(s.agency_code)}">동의서 받음 · 승인</button><button class="btn small" data-sno="${esc(s.agency_code)}">반려</button></div></div></div>`).join('')}</div></section>` : ''}
     <div class="chips ct-chips">${[['todo', '처리할 일'], ['sent', '대리점 날인 대기'], ['done', '체결 완료'], ['all', '전체']].map(([k, l]) =>
       `<button class="chip ${f === k ? 'on' : ''}" data-cf="${k}">${l} ${cnt(k)}</button>`).join('')}</div>
-    ${ctRows(shown)}
+    ${shown.length || !list.length ? ctRows(shown) : `<div class="empty">${{ todo: '지금 처리할 계약은 없습니다.', sent: '대리점 날인을 기다리는 계약이 없습니다.', done: '아직 체결 완료된 계약이 없습니다.' }[f] || '계약이 없습니다.'}</div>`}
     ${(seals || []).some((s) => s.status !== 'pending') ? `<details class="ct-allseals"><summary>등록된 날인 이미지 전체 보기</summary><div class="ct-seals">${(seals || []).filter((s) => s.status !== 'pending').map((s) =>
       `<div class="ct-seal"><div class="ct-sealimg"><img data-src="${esc(s.image_path)}" alt=""></div><div><b>${esc(s.agency_code)} ${esc(agencyName(s.agency_code))}</b>
       <div class="muted">${esc(s.kind)} · <span class="ct-st ${SEAL_ST[s.status][1]}">${SEAL_ST[s.status][0]}</span>${s.approved_at ? ` · 승인 ${fmt(s.approved_at).slice(0, 10)} ${esc(s.approved_by || '')}` : ''}</div></div></div>`).join('')}</div></details>` : ''}
@@ -2860,7 +2861,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=a054587');
+    const V = await import('./viewer.js?v=3807246');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
