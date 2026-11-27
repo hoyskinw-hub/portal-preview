@@ -856,3 +856,4 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .ag-foldov { position: absolute; top: 0; z-index: 2; background: linear-gradient(0deg, #e3e7ed, #f4f6f9 35%, #fff); border-bottom: 1.5px solid #b9c1cd;
   box-shadow: 0 3px 6px rgba(0,0,0,.12); display: grid; place-items: center; }
 .ag-foldov span { font-size: 10.5px; color: #6b7686; line-height: 1.2; }
+.ag-stamp.opt { border-style: dashed; color: #b3261e; font-size: 9.5px; letter-spacing: -.03em; background: rgba(255,255,255,.75); }
