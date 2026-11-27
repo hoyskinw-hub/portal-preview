@@ -927,3 +927,7 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   .seg { flex-direction: column; }
   .seg label { justify-content: flex-start; padding: 11px 12px; }
 }
+
+/* 정책 팝업: 오늘 하루 보지 않기 */
+.modal-btns .pol-skip { margin-right: auto; border: 0; background: none; color: var(--muted); font-weight: 500; padding-left: 2px; text-decoration: underline; text-underline-offset: 3px; }
+.modal-btns .pol-skip:hover { color: var(--ink); background: none; }

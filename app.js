@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=564ec03';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=366560a';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1511,12 +1511,29 @@ function bindPolicy(root, P) {
     resetView(); Object.assign(st, { tab: 'library', libPage: data?.id || null, libCat: null }); window.scrollTo(0, 0); render();
   });
 }
-function showPolicy(P) {
-  try { localStorage.setItem('policy_seen_' + P.version, '1'); } catch { /* 저장 불가 환경 */ }
+// 정책 팝업: 대리점은 로그인할 때마다(브라우저 창 기준 1회) 보여 주고, [오늘 하루 보지 않기]를 누르면 그날은 안 보임
+const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+function showPolicy(P, auto = false) {
+  try { sessionStorage.setItem('policy_shown_' + P.version, '1'); } catch { /* 저장 불가 환경 */ }
   modal(`📣 ${P.title}`, `<div id="polBox">${policyHtml(P)}</div>`, async () => {}, '확인했어요', true);
   const box = document.querySelector('#polBox'); if (box) bindPolicy(box, P);
+  if (auto) {
+    const btns = box?.closest('.modal')?.querySelector('.modal-btns');
+    if (btns) {
+      const skip = document.createElement('button'); skip.type = 'button'; skip.className = 'btn ghost pol-skip'; skip.textContent = '오늘 하루 보지 않기';
+      skip.onclick = () => { try { localStorage.setItem('policy_hide_' + P.version, todayKey()); } catch {} box.closest('.modal-bg')?.remove(); };
+      btns.prepend(skip);
+    }
+  }
 }
-function policySeen(P) { try { return !!localStorage.getItem('policy_seen_' + P.version); } catch { return true; } }
+function policySeen(P) {
+  try { return localStorage.getItem('policy_hide_' + P.version) === todayKey() || !!sessionStorage.getItem('policy_shown_' + P.version); } catch { return true; }
+}
+// 로그인 알림 팝업이 떠 있으면 닫힌 뒤에 정책 팝업을 띄움
+function showPolicyAuto(P) {
+  const tick = () => { if (document.querySelector('.modal-bg')) return setTimeout(tick, 400); if (!policySeen(P)) showPolicy(P, true); };
+  setTimeout(tick, 300);
+}
 
 async function viewHome(main, { pendingCnt }) {
   const admin = isAdmin();
@@ -1610,7 +1627,7 @@ async function viewHome(main, { pendingCnt }) {
   if (P) {
     bindPolicy(main.querySelector('.h-policy'), P);
     main.querySelector('[data-polopen]').onclick = () => showPolicy(P);
-    if (!admin && !policySeen(P)) showPolicy(P);   // 대리점: 새 정책은 로그인 후 첫 화면에서 한 번 보여줌
+    if (!admin && !policySeen(P)) showPolicyAuto(P);   // 대리점: 로그인 후 첫 화면에서 (오늘 하루 보지 않기 전까지)
   }
   main.querySelectorAll('[data-new]').forEach((b) => b.onclick = () => {
     if (b.dataset.new === 'notice') return go({ tab: 'notices', noticeEdit: 'new' });
@@ -1951,7 +1968,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=564ec03'), import('./docfill.js?v=564ec03'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=366560a'), import('./docfill.js?v=366560a'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2102,7 +2119,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=564ec03')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=366560a')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2742,7 +2759,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=564ec03');
+  const V = await import('./viewer.js?v=366560a');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2884,7 +2901,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=564ec03');
+    const V = await import('./viewer.js?v=366560a');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
