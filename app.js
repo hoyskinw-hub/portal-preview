@@ -1671,27 +1671,27 @@ function saveBlob(blob, name) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
 // which: apply(개설 신청서) | forms(계약서·신고서·서약서) | all(전체 + 고지사항 원본)
-async function makePdf(which, info, app) {
+async function buildPdfBytes(which, info, app) {
   const K = await pdfKit();
   const sub = app.submitted_at ? new Date(app.submitted_at) : null;
   const data = K.docData(info, { appNo: app.id, recvDate: sub ? `${sub.getFullYear()}. ${sub.getMonth() + 1}. ${sub.getDate()}.` : undefined });
   const build = async (n) => K.buildPdf(K.lib, await tplFile(`${n}.pdf`), await tplFile(`${n}.json`, 'json'), K.font, data);
-  const nm = (info.agency || '대리점').replace(/[\\/:*?"<>|]/g, '');
-  let bytes, title;
-  if (which === 'all') {
-    const out = await K.lib.PDFDocument.create();
-    for (const src of [await build('apply'), await build('forms'), await tplFile('notice.pdf')]) {
-      const d = await K.lib.PDFDocument.load(src);
-      (await out.copyPages(d, d.getPageIndices())).forEach((p) => out.addPage(p));
-    }
-    out.setTitle(`개설 서류 일체_${nm}`);
-    bytes = await out.save(); title = `개설 서류 일체_${nm}.pdf`;
-  } else {
-    bytes = await build(which);
-    title = `${which === 'apply' ? '대리점 개설 신청서' : '계약서·신고서·서약서'}_${nm}.pdf`;
+  if (which !== 'all') return build(which);
+  const out = await K.lib.PDFDocument.create();
+  for (const src of [await build('apply'), await build('forms'), await tplFile('notice.pdf')]) {
+    const d = await K.lib.PDFDocument.load(src);
+    (await out.copyPages(d, d.getPageIndices())).forEach((p) => out.addPage(p));
   }
+  out.setTitle(`개설 서류 일체_${info.agency || ''}`);
+  return out.save();
+}
+async function makePdf(which, info, app) {
+  const nm = (info.agency || '대리점').replace(/[\\/:*?"<>|]/g, '');
+  const bytes = await buildPdfBytes(which, info, app);
+  const title = which === 'all' ? `개설 서류 일체_${nm}.pdf` : `${which === 'apply' ? '대리점 개설 신청서' : '계약서·신고서·서약서'}_${nm}.pdf`;
   saveBlob(new Blob([bytes], { type: 'application/pdf' }), title);
 }
+
 // ---------- 날인 가이드 (PDF 내려받기 전) ----------
 function sealSteps(info) {
   const corp = info.corp_type === '법인';
@@ -1699,11 +1699,11 @@ function sealSteps(info) {
   const staff = staffList(info);
   const L = [
     { k: 'apply_1', t: '대리점 개설 신청서', n: 1, s: [`2쪽 하단 <b>신청인 대표자 (인)</b>에 ${seal}`] },
-    { k: 'c_main', t: '대리점 계약서', n: 2, s: ['모든 쪽 사이에 <b>간인</b>(두 쪽에 걸쳐 찍기)', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`,
+    { k: 'c_main', t: '대리점 계약서', n: 2, s: ['첫 장 <b>계인</b>(2부를 겹쳐 걸쳐 찍기)', '모든 쪽 사이에 <b>간인</b>(두 쪽에 걸쳐 찍기)', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`,
       ...(corp ? ['같은 쪽 <b>"연대보증인" 이름 (인)</b>에 대표자 <b>개인 인감</b>'] : [])] },
-    { k: 'c_fee', t: '가맹점관리수수료 및 DDC 지급수수료 관련 특약서', n: 2, s: ['모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
-    { k: 'c_ddc', t: 'DDC 매출전표 투입업무 특약서', n: 2, s: ['모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
-    { k: 'c_lease', t: '신용카드조회기 임대차 계약서', n: 2, s: ['모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
+    { k: 'c_fee', t: '가맹점관리수수료 및 DDC 지급수수료 관련 특약서', n: 2, s: ['첫 장 <b>계인</b>', '모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
+    { k: 'c_ddc', t: 'DDC 매출전표 투입업무 특약서', n: 2, s: ['첫 장 <b>계인</b>', '모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
+    { k: 'c_lease', t: '신용카드조회기 임대차 계약서', n: 2, s: ['첫 장 <b>계인</b>', '모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
     { k: 'f_bank', t: '거래처 등록 및 입금계좌(인감) 신고서', n: 1, s: ['<b>&lt;신고인&gt;</b> 칸에 주소·상호·대표자를 <b>자필</b>로 기재',
       `<b>${corp ? '법인인감' : '대표자 인감'}</b> 칸에 ${seal}`, '<b>통장인감</b> 칸에 통장에 등록된 도장', ...(corp && info.use_seal ? ['<b>사용인감</b> 칸에 사용인감'] : [])] },
     { k: 'f_sec', t: '보안 서약서 (대리점용)', n: 1, s: [`마지막 쪽 <b>대표자 (인)</b>에 ${seal}`] },
@@ -1744,13 +1744,95 @@ function printGuide(html, info) {
     <body><div class="tool"><button onclick="print()">🖨 인쇄</button></div><h1>날인 가이드 — ${esc(info.agency || '')}</h1>${html}</body></html>`);
   w.document.close();
 }
-function guideThenDownload(info, app, which, btn) {
-  sealGuide(info, app, which).then((html) => {
-    modal('출력 전 날인 가이드', `${html}<div class="sg-print"><button type="button" class="btn small" id="sgPrint">🖨 가이드 인쇄</button></div>`, async () => {
-      await makePdf(which, info, app); toast('PDF를 내려받았습니다.');
-    }, '확인했어요 · PDF 내려받기', true);
-    document.querySelector('#sgPrint')?.addEventListener('click', () => printGuide(html, info));
-  });
+// 애니메이션 날인 가이드: 실제로 만들어질 PDF 쪽 위에 도장이 찍히는 모습을 단계별로 보여준다
+async function guideSlides(info, app) {
+  const K = await pdfKit();
+  const data = K.docData(info, { appNo: app.id });
+  const fl = await tplFile('forms.json', 'json'), al = await tplFile('apply.json', 'json');
+  const plan = K.pagePlan(fl, data);
+  const nApply = al.pages.length, nForms = plan.length, notice = nApply + nForms + 1;
+  const { pages } = K.docPages(fl, data, nApply);
+  pages.apply_1 = { from: 1, to: nApply };
+  pages.notice = { from: notice, to: notice };
+  const corp = info.corp_type === '법인';
+  const keep = (st) => !(st.k === 'g_name' && !corp) && !(st.k === 'box_사용인감' && !(corp && info.use_seal));
+  const stampsOf = (n) => {
+    if (n <= nApply) return (al.stamps || []).filter((st) => st.p === n - 1 && keep(st));
+    if (n === notice) return [{ x: 508, y: 156, k: 'notice' }];
+    const src = plan[n - nApply - 1]?.src;
+    return (fl.stamps || []).filter((st) => st.p === src && keep(st));
+  };
+  const S = [];
+  const cm = pages.c_main;
+  if (cm) {
+    S.push({ kind: 'gyein', t: '계약서 첫 장 계인', p: cm.from, sub: '양사 계약서 4종 공통 · 2부의 첫 장에 걸쳐',
+      s: ['계약서 2부를 조금 어긋나게 겹쳐 놓고, <b>두 부의 첫 장에 걸치도록</b> 도장을 찍습니다.', '대리점 계약서 · 특약서 2종 · 임대차 계약서 <b>4종 모두</b> 각각 합니다.'] });
+    S.push({ kind: 'ganin', t: '계약서 쪽마다 간인', p: cm.from + 1, sub: '각 계약서의 모든 쪽 사이',
+      s: ['앞 장을 접어 다음 장과 맞닿게 한 뒤, <b>두 쪽에 걸쳐</b> 도장을 찍습니다.', '1-2쪽, 2-3쪽 … 마지막 쪽까지 <b>모든 쪽 사이</b>에, 계약서 4종 · 2부 모두 합니다.'] });
+  }
+  for (const x of sealSteps(info)) {
+    const pg = pages[x.k]; if (!pg) continue;
+    const p = x.k === 'f_secp' ? pg.from : pg.to;
+    S.push({ kind: 'page', t: x.t, p, sub: `${x.n}부 · ${pg.from === pg.to ? pg.from : pg.from + '~' + pg.to}쪽`, s: x.s, stamps: stampsOf(p) });
+  }
+  return S;
+}
+function guideThenDownload(info, app, which) {
+  modal('출력 전 날인 가이드', `<div class="ag" id="ag"><div class="ag-load">서류 미리보기를 준비하고 있습니다…</div></div>`, async () => {
+    await makePdf(which, info, app); toast('PDF를 내려받았습니다.');
+  }, '확인했어요 · PDF 내려받기', true);
+  const root = document.querySelector('#ag');
+  (async () => {
+    try {
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js')]);
+      const doc = await V.loadPdfBytes(bytes);
+      const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
+      root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부의 첫 장에 걸쳐</span><span><b>간인</b> 쪽과 쪽 사이에 걸쳐</span></div>
+        <div class="ag-body"><ol class="ag-list">${S.map((x, i) => `<li data-i="${i}"><b>${esc(x.t)}</b><small>${esc(x.sub)}</small></li>`).join('')}</ol>
+        <div class="ag-main"><div class="ag-stage" id="agStage"></div><div class="ag-cap" id="agCap"></div>
+        <div class="ag-nav"><button type="button" class="btn small" id="agPrev">← 이전</button><span id="agPos"></span><button type="button" class="btn small" id="agNext">다음 →</button></div>
+        <div class="ag-nav2"><button type="button" class="btn small" id="agPrint">🖨 글로 된 가이드 인쇄</button></div></div></div>`;
+      const W = Math.max(220, Math.min(330, (root.querySelector('.ag-main').clientWidth || 330) - 10));
+      const pageCanvas = async (n, w) => { const c = document.createElement('canvas'); const sz = await V.renderPdfPage(doc, n, c, w); return { c, sz }; };
+      let cur = 0, token = 0;
+      const show = async (i) => {
+        cur = (i + S.length) % S.length; const my = ++token;
+        const x = S[cur], st = root.querySelector('#agStage');
+        root.querySelectorAll('.ag-list li').forEach((li) => li.classList.toggle('on', Number(li.dataset.i) === cur));
+        root.querySelector('#agCap').innerHTML = `<b>${esc(x.t)}</b> <span class="muted">${esc(x.sub)}</span><ul>${x.s.map((t) => `<li>${t}</li>`).join('')}</ul>`;
+        root.querySelector('#agPos').textContent = `${cur + 1} / ${S.length}`;
+        const box = document.createElement('div'); box.className = 'ag-scene ag-' + x.kind;
+        const mk = (cls, left, top) => { const s = document.createElement('div'); s.className = 'ag-stamp ' + cls; s.textContent = '인'; s.style.left = left + 'px'; s.style.top = top + 'px'; return s; };
+        if (x.kind === 'gyein') {
+          const w = Math.round(W * 0.74);
+          for (const k of [0, 1]) { const { c } = await pageCanvas(x.p, w); const pw = document.createElement('div'); pw.className = 'ag-page ag-copy' + k; pw.style.left = (k * w * 0.32) + 'px'; pw.style.top = (k * 14) + 'px'; pw.append(c); box.append(pw); }
+          box.style.width = (w * 1.32) + 'px'; box.style.height = (w * 1.414 + 16) + 'px';
+          box.append(mk('big', w * 0.32 + w * 0.68 - 4, w * 0.36));
+        } else if (x.kind === 'ganin') {
+          const w = Math.round(W * 0.6);
+          for (const k of [0, 1]) { const { c } = await pageCanvas(x.p + k, w); const pw = document.createElement('div'); pw.className = 'ag-page ag-fold' + k; pw.style.left = (k * w * 0.62) + 'px'; pw.append(c); box.append(pw); }
+          box.style.width = (w * 1.62) + 'px'; box.style.height = (w * 1.414 + 6) + 'px';
+          box.append(mk('big', w * 0.98, w * 0.66));
+        } else {
+          const { c, sz } = await pageCanvas(x.p, W);
+          const pw = document.createElement('div'); pw.className = 'ag-page'; pw.append(c); box.append(pw);
+          const H = W * sz.h / sz.w;
+          (x.stamps || []).forEach((p, j) => { const s = mk(p.k.startsWith('box_') ? 'box' : '', p.x / sz.w * W, (1 - p.y / sz.h) * H); s.style.animationDelay = (0.4 + j * 0.6) + 's'; pw.append(s); });
+          const tag = document.createElement('div'); tag.className = 'ag-pgno'; tag.textContent = `${x.p}쪽`; pw.append(tag);
+        }
+        if (my !== token) return;
+        st.innerHTML = ''; st.append(box);
+      };
+      root.querySelector('#agPrev').onclick = () => show(cur - 1);
+      root.querySelector('#agNext').onclick = () => show(cur + 1);
+      root.querySelectorAll('.ag-list li').forEach((li) => li.onclick = () => show(Number(li.dataset.i)));
+      root.querySelector('#agPrint').onclick = async () => printGuide(await sealGuide(info, app, 'all'), info);
+      show(0);
+    } catch (e) {
+      console.error(e);
+      root.innerHTML = await sealGuide(info, app, which);   // 미리보기를 못 만들면 글로 된 가이드
+    }
+  })();
 }
 
 async function openNoticePdf() {

@@ -199,3 +199,19 @@ export async function renderPdfThumb(url, canvas, width = 360) {
   await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
   return doc.numPages;
 }
+
+// 날인 가이드: PDF(바이트)를 열고 특정 쪽을 캔버스에 그린다
+export async function loadPdfBytes(bytes) {
+  if (!pdfjs) { pdfjs = await import(PDFJS_URL); pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; }
+  return pdfjs.getDocument({ data: bytes }).promise;
+}
+export async function renderPdfPage(doc, n, canvas, width = 360) {
+  const page = await doc.getPage(n);
+  const v0 = page.getViewport({ scale: 1 });
+  const scale = (width * (window.devicePixelRatio || 1)) / v0.width;
+  const vp = page.getViewport({ scale });
+  canvas.width = vp.width; canvas.height = vp.height;
+  canvas.style.width = width + 'px'; canvas.style.height = Math.round(width * v0.height / v0.width) + 'px';
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+  return { w: v0.width, h: v0.height };
+}
