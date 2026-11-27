@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=91d596b';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=2bff35f';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -266,14 +266,26 @@ async function render() {
     const { count, error: ce } = await sb.from('contracts').select('id', { count: 'exact', head: true }).eq('status', isAdmin() ? 'agency_signed' : 'sent');
     ctCnt = count || 0; ctReady = !ce;
   }
+  // 문의 알림: 본사 = 답변이 필요한 문의 수 / 대리점 = 아직 읽지 않은 새 답변 수
+  const lastCmt = (p) => (p.comments || []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at)).pop();
+  let qCnt = 0;
+  if (isAdmin()) {
+    const { data: qs } = await sb.from('posts').select('id,comments(author_role,created_at)').eq('kind', 'question').order('last_activity', { ascending: false }).limit(200);
+    qCnt = (qs || []).filter((p) => { const c = lastCmt(p); return !c || c.author_role !== 'admin'; }).length;
+  } else if (!isProspect() && me.agency_code) {
+    const { data: qs } = await sb.from('posts').select('id,comments(author_role,created_at)').eq('agency_code', me.agency_code).eq('kind', 'question').order('last_activity', { ascending: false }).limit(100);
+    const answered = (qs || []).filter((p) => lastCmt(p)?.author_role === 'admin');
+    const { mine } = await readMap(answered.map((p) => p.id));
+    qCnt = answered.filter((p) => !mine[p.id] || new Date(mine[p.id]) < new Date(lastCmt(p).created_at)).length;
+  }
   // 본사: 공통 메뉴 + [본사 관리] 묶음 (누르면 바로 아래에 하위 메뉴)
-  const HQ_TABS = [['inbox', '최근 문의', '💬'], ['board', '대리점별 게시판', '🗂'], ['files', '대리점 자료함', '📁'], ['onboarding', '개설 신청', '📝', obPending],
+  const HQ_TABS = [['inbox', '최근 문의', '💬', qCnt], ['board', '대리점별 게시판', '🗂'], ['files', '대리점 자료함', '📁'], ['onboarding', '개설 신청', '📝', obPending],
     ['contracts', '전자계약', '✍️', ctCnt], ['users', '가입 승인', '🙋', pendingCnt], ['agencies', '대리점 관리', '🏢']].filter(([k]) => isSuper() || k !== 'agencies');
   const inHq = isAdmin() && HQ_TABS.some(([k]) => k === st.tab);
   const hqSum = HQ_TABS.reduce((a, t) => a + (t[3] || 0), 0);
   const tabs = isProspect() ? [['onboard', '대리점 개설 신청']] : isAdmin()
     ? [['home', '홈'], ['notices', '공지사항'], ['library', '자료실'], ['faq', 'FAQ']]
-    : [['home', '홈'], ['notices', '공지사항', newNotice], ['library', '자료실'], ['faq', 'FAQ'], ['board', '1:1 문의'],
+    : [['home', '홈'], ['notices', '공지사항', newNotice], ['library', '자료실'], ['faq', 'FAQ'], ['board', '1:1 문의', qCnt],
        ['contracts', '전자계약', ctCnt], ['myagency', '우리 대리점', memberPending]].filter(([k]) => (isOwner() || !OWNER_ONLY.has(k)) && (k !== 'contracts' || ctReady));
   const ICON = { home: '🏠', notices: '📢', library: '📚', faq: '❓', board: '💬', myagency: '🏢', contracts: '✍️' };
   if (!isAdmin() && !tabs.some(([k]) => k === st.tab) && !(st.tab === 'search' && !isProspect())) st.tab = tabs[0][0];
@@ -292,7 +304,7 @@ async function render() {
     <main id="main"></main>
     ${!isAdmin() && tabs.length > 1 ? `<nav class="bnav" style="--n:${tabs.length}">${tabs.map(([k, l, c]) => `<button class="${st.tab === k ? 'on' : ''}" data-tab="${k}"><span class="bi">${ICON[k]}${c ? `<i>${c}</i>` : ''}</span>${l}</button>`).join('')}</nav>` : ''}`;
   app.classList.toggle('agency-ui', !isAdmin());
-  app.querySelector('#logout').onclick = () => sb.auth.signOut();
+  app.querySelector('#logout').onclick = () => { try { sessionStorage.removeItem(`portal_brief_${me.id}`); } catch {} sb.auth.signOut(); };
   if (app.querySelector('#gs')) app.querySelector('#gs').onsubmit = (e) => {
     e.preventDefault(); const q = cleanQ(e.target.q.value); if (!q) return;
     resetView(); st.tab = 'search'; st.gq = q; render();
@@ -310,6 +322,11 @@ async function render() {
     sub.hidden = !open; st.hqOpen = open; hqBtn.setAttribute('aria-expanded', String(open));
   };
   app.querySelector('.brand').onclick = () => goTab('home');
+  // 로그인 후 처음 한 번: 새 알림 요약 팝업
+  if (!isProspect()) showLoginBrief(isAdmin()
+    ? [['inbox', '답변이 필요한 문의', qCnt], ['contracts', '본사 날인이 필요한 전자계약', ctCnt], ['users', '가입 승인 대기', pendingCnt], ['onboarding', '검토할 개설 신청', obPending]]
+    : [['board', '답변이 도착한 문의', qCnt], ['notices', '새 공지사항', newNotice || 0], ['contracts', '날인할 전자계약', ctReady ? ctCnt : 0], ['myagency', '직원 가입 승인 대기', memberPending]],
+  goTab);
   if (st.tab === 'notices') safeLS.set(seenKey, new Date().toISOString());
   const main = app.querySelector('#main');
   main.innerHTML = '<div class="empty">불러오는 중…</div>';
@@ -736,6 +753,25 @@ function bindMdEditors(root) {
       pv.textContent = on ? '편집' : '미리보기';
     };
   });
+}
+
+// 로그인 후 첫 화면에서 한 번만(브라우저 창 기준) 새 알림 요약을 띄운다
+function showLoginBrief(items, go) {
+  const key = `portal_brief_${me.id}`;
+  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { return; }
+  const list = items.filter(([, , n]) => n > 0);
+  if (!list.length) return;
+  const wrap = document.createElement('div'); wrap.className = 'modal-bg';
+  wrap.innerHTML = `<div class="modal card brief" role="dialog" aria-modal="true"><h3>🔔 새 알림 ${list.reduce((a, [, , n]) => a + n, 0)}건</h3>
+    <p class="hint">${esc(me.contact_name || '')}님, 확인이 필요한 항목입니다.</p>
+    <ul class="brief-list">${list.map(([k, l, n]) => `<li><button type="button" data-go="${k}"><span>${esc(l)}</span><b>${n}건</b><i>바로 가기 ›</i></button></li>`).join('')}</ul>
+    <div class="modal-btns"><button type="button" class="btn primary" data-x>확인</button></div></div>`;
+  document.body.appendChild(wrap);
+  const close = () => wrap.remove();
+  wrap.querySelector('[data-x]').onclick = close;
+  wrap.onclick = (e) => { if (e.target === wrap) close(); };
+  wrap.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => { close(); go(b.dataset.go); });
+  setTimeout(() => wrap.querySelector('[data-x]')?.focus(), 0);
 }
 
 function modal(title, bodyHtml, onSubmit, submitLabel = '저장', wide = false) {
@@ -1781,7 +1817,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=91d596b'), import('./docfill.js?v=91d596b'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=2bff35f'), import('./docfill.js?v=2bff35f'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1927,7 +1963,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=91d596b')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=2bff35f')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부의 첫 장에 걸쳐</span><span><b>간인</b> 쪽과 쪽 사이에 걸쳐</span></div>
@@ -2459,9 +2495,59 @@ function ctMarkSummary(marks = []) {
     k('계인').length ? '계인 1곳(첫 장)' : '', k('간인').length ? `간인 ${k('간인').length}곳(모든 장)` : ''].filter(Boolean).join(' · ');
 }
 
+// 서명란 자동 찾기: 문서에서 "(인)"·"(서명)"·"(날인)" 자리를 찾고, 가장 가까운 당사자 표시("을"·대리점명 vs "갑"·한국정보통신)로 대리점 쪽만 고른다
+function ctFindSignSpots(pages, agName) {
+  const core = String(agName || '').replace(/㈜|\(주\)|주식회사/g, '').trim();
+  const spots = [], keys = [];
+  const KEY = [[/(^|[\s"“'‘(\[「<])(을)(?=[\s"”'’)\]」>:：,]|$)/g, 'ag'], [/(^|[\s"“'‘(\[「<])(갑)(?=[\s"”'’)\]」>:：,]|$)/g, 'hq'],
+    [/한국정보통신|KICC/g, 'hq'], [/대리점/g, 'ag']];
+  if (core.length >= 2) KEY.push([new RegExp(core.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), 'ag']);
+  for (let n = 1; n < pages.length; n++) {
+    const items = (pages[n] || []).slice().sort((a, b) => b.y - a.y || a.x - b.x);
+    const lines = [];
+    for (const it of items) {
+      const ln = lines.find((l) => Math.abs(l.y - it.y) < Math.max(2, it.size * 0.45));
+      if (ln) ln.items.push(it); else lines.push({ y: it.y, size: it.size, items: [it] });
+    }
+    for (const ln of lines) {
+      ln.items.sort((a, b) => a.x - b.x);
+      let txt = '', pos = [], prevEnd = null;
+      for (const it of ln.items) {
+        if (prevEnd !== null && it.x - prevEnd > it.size * 0.25) { txt += ' '; pos.push(null); }
+        const chars = [...it.str];
+        chars.forEach((ch, k) => { txt += ch; pos.push(it.x + (it.w * (k + 0.5)) / chars.length); });
+        prevEnd = it.x + it.w;
+      }
+      const at = (i) => { for (let j = i; j < pos.length; j++) if (pos[j] != null) return pos[j]; return pos[pos.length - 1]; };
+      for (const m of txt.matchAll(/\(\s*(인|印|서명|날인|직인|서명\s*또는\s*인|서명\s*또는\s*날인)\s*\)/g)) {
+        const x = (at(m.index) + at(m.index + m[0].length - 1)) / 2;
+        spots.push({ p: n, x: Math.round(x), y: Math.round(ln.y + ln.size * 0.35), size: ln.size });
+      }
+      for (const [re, side] of KEY) for (const m of txt.matchAll(re)) {
+        const i = m.index + (m[1] ? m[1].length : 0);
+        keys.push({ p: n, x: at(i), y: ln.y, side });
+      }
+    }
+  }
+  // 각 서명란에서 위·왼쪽으로 가장 가까운 당사자 표시를 찾는다
+  const judged = spots.map((s) => {
+    let best = null, bd = Infinity;
+    for (const k of keys) {
+      if (k.p !== s.p || k.y < s.y - s.size * 1.5 || k.y > s.y + 220) continue;
+      const dx = k.x > s.x + 20 ? (k.x - s.x) * 3 : s.x - k.x, dy = k.y - s.y;
+      const d = Math.hypot(dx, dy * 1.4);
+      if (d < bd) { bd = d; best = k; }
+    }
+    return { ...s, side: best?.side || null };
+  });
+  let mine = judged.filter((s) => s.side === 'ag');
+  if (!mine.length && judged.length && judged.every((s) => !s.side)) mine = [judged[judged.length - 1]]; // 표시가 전혀 없으면 마지막 서명란
+  return { all: judged, mine };
+}
+
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=91d596b');
+  const V = await import('./viewer.js?v=2bff35f');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2573,8 +2659,8 @@ async function ctEditView(main) {
         <label class="field"><span>계약명</span><input name="title" required maxlength="120" value="${esc(c?.title || '')}" placeholder="예) 2027년 수수료 특약서"></label>
         <label class="field"><span>대리점 안내 문구 (선택)</span><textarea name="memo" rows="3" placeholder="예) 12월 정산부터 적용되는 특약입니다.">${esc(c?.memo || '')}</textarea></label>
         <label class="field"><span>계약서 PDF ${c ? '(바꿀 때만)' : ''}</span><input type="file" id="ctFile" accept="application/pdf,.pdf" ${c ? '' : 'required'}></label>
-        <div class="ct-markinfo"><b>서명란 날인 <span id="mkCnt">${marks.length}</span>곳</b>
-          <p class="hint">오른쪽 문서에서 대리점 도장이 찍힐 서명란(“(인)” 자리)을 누르세요. 표시를 다시 누르면 지워집니다.</p>
+        <div class="ct-markinfo"><div class="ct-mkhead"><b>서명란 날인 <span id="mkCnt">${marks.length}</span>곳</b><button type="button" class="btn small" id="mkFind">서명란 자동 찾기</button></div>
+          <p class="hint">PDF를 올리면 대리점 쪽 서명란 “(인)” 자리를 자동으로 찾아 표시합니다. 잘못 잡힌 표시는 눌러서 지우고, 빠진 곳은 문서에서 직접 누르면 추가됩니다.</p>
           <label class="ct-auto"><input type="checkbox" id="mkAuto" checked> 계인·간인 자동으로 찍기
             <small>첫 장 오른쪽 위 계인 1곳 + (2장 이상이면) 모든 장 오른쪽 끝에 간인 — <span id="mkAutoCnt"></span></small></label>
           <label class="field inline"><span>도장 크기</span><select id="mkSize">${[[42, '작게 (1.5cm)'], [57, '보통 (2cm)'], [71, '크게 (2.5cm)']].map(([v, l]) => `<option value="${v}" ${v === 57 ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
@@ -2600,12 +2686,25 @@ async function ctEditView(main) {
       ? `계인 ${a.filter((m) => m.t === '계인').length}곳 · 간인 ${a.filter((m) => m.t === '간인').length}곳` : '사용 안 함';
     window.scrollTo(0, y);
   };
+  const findSign = async (auto) => {
+    if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
+    const V = await import('./viewer.js?v=2bff35f');
+    const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
+    const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
+    if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
+    const w = Number(main.querySelector('#mkSize').value);
+    marks = r.mine.map((m) => ({ p: m.p, x: m.x, y: m.y, w }));
+    toast(`서명란 ${r.all.length}곳 중 대리점 쪽 ${r.mine.length}곳을 표시했습니다. 위치를 확인해 주세요.`);
+    await redraw();
+  };
+  main.querySelector('#mkFind').onclick = () => findSign(false).catch(fail);
   main.querySelector('#mkAuto').onchange = redraw;
   main.querySelector('#mkSize').onchange = redraw;
   main.querySelector('#ctFile').onchange = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     if (!PDF_EXT.test(file.name)) { toast('PDF 파일만 올릴 수 있습니다.', true); e.target.value = ''; return; }
-    newFile = file; bytes = new Uint8Array(await file.arrayBuffer()); marks = []; sizes = []; redraw();
+    newFile = file; bytes = new Uint8Array(await file.arrayBuffer()); marks = []; sizes = []; await redraw();
+    findSign(true).catch(() => {});
   };
   await redraw();
   const save = async (send) => {

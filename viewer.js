@@ -215,3 +215,19 @@ export async function renderPdfPage(doc, n, canvas, width = 360) {
   await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
   return { w: v0.width, h: v0.height };
 }
+
+// 서명란 자동 찾기용: 쪽별 글자 조각과 위치 (x: 왼쪽부터, y: 아래부터, 단위 pt)
+export async function pdfTextItems(doc) {
+  const pages = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const v0 = page.getViewport({ scale: 1 });
+    const tc = await page.getTextContent();
+    pages[n] = tc.items.filter((it) => it.str && it.str.trim()).map((it) => {
+      const [vx, vy] = v0.convertToViewportPoint(it.transform[4], it.transform[5]);
+      const size = Math.hypot(it.transform[2], it.transform[3]) || it.height || 10;
+      return { str: it.str, x: vx, y: v0.height - vy, w: it.width, size };
+    });
+  }
+  return pages;
+}

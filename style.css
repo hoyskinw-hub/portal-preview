@@ -791,3 +791,13 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .ct-auto input { margin-right: 4px; vertical-align: -2px; }
 .ct-auto small { display: block; color: var(--muted); font-size: 12px; margin: 2px 0 0 22px; }
 .ct-stepnow { font-size: 12.5px; margin: 8px 0 0; }
+.ct-mkhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* ---------- 로그인 알림 요약 ---------- */
+.modal.brief h3 { margin-bottom: 4px; }
+.brief-list { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 6px; }
+.brief-list button { width: 100%; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; text-align: left;
+  border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 11px 14px; cursor: pointer; font-size: 14.5px; }
+.brief-list button:hover { border-color: var(--brand); background: var(--brand-soft); }
+.brief-list b { color: var(--danger); font-size: 15px; }
+.brief-list i { font-style: normal; color: var(--brand); font-size: 12.5px; }
