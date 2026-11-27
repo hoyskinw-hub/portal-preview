@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=03f3041';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=74d8b46';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -335,7 +335,7 @@ async function render() {
 
 function agencySelect() {
   if (!isAdmin()) return '';
-  return `<select id="agSel">${agencies.map((a) => `<option value="${esc(a.code)}" ${a.code === st.agency ? 'selected' : ''}>${esc(a.code)} · ${esc(a.name)}</option>`).join('')}</select>`;
+  return `<select id="agSel" class="ag-search">${agencies.map((a) => `<option value="${esc(a.code)}" ${a.code === st.agency ? 'selected' : ''}>${esc(a.code)} · ${esc(a.name)}</option>`).join('')}</select>`;
 }
 function bindAgencySelect(root) {
   const s = root.querySelector('#agSel');
@@ -509,8 +509,8 @@ async function viewCompose(main) {
   main.querySelector('#back').onclick = () => { st.compose = false; render(); };
   if (!admin) bindFaqSuggest(main);
   if (admin) {
-    main.querySelector('#all').onclick = () => main.querySelectorAll('[name=ag]').forEach((c) => (c.checked = true));
-    main.querySelector('#none').onclick = () => main.querySelectorAll('[name=ag]').forEach((c) => (c.checked = false));
+    main.querySelector('#all').onclick = () => main.querySelectorAll('.agency-pick label:not([hidden]) [name=ag]').forEach((c) => (c.checked = true));
+    main.querySelector('#none').onclick = () => main.querySelectorAll('.agency-pick label:not([hidden]) [name=ag]').forEach((c) => (c.checked = false));
   }
   main.querySelector('#cf').onsubmit = async (e) => {
     e.preventDefault();
@@ -586,13 +586,13 @@ async function viewUsers(main) {
     <div class="bar"><h2>가입 승인</h2></div>
     <div class="card"><table class="tbl"><thead><tr><th>신청자</th><th>적어낸 대리점</th><th>연결할 대리점</th><th>구분</th><th></th></tr></thead><tbody>
       ${pending.length ? pending.map((u) => `<tr data-u="${u.id}"><td>${who(u)}</td><td>${esc(u.requested_name || '')} ${u.requested_code ? `(${esc(u.requested_code)})` : ''}<div style="color:var(--muted);font-size:12px">${fmt(u.created_at)}</div></td>
-        <td><select class="ag">${opts(guess(u))}</select></td><td>${roleSel(u.requested_role)}</td>
+        <td><select class="ag ag-search">${opts(guess(u))}</select></td><td>${roleSel(u.requested_role)}</td>
         <td style="text-align:right;white-space:nowrap"><button class="btn small primary" data-act="approve">승인</button> <button class="btn small danger" data-act="reject">거절</button></td></tr>`).join('')
         : '<tr><td colspan="5"><div class="empty">대기 중인 신청이 없습니다.</div></td></tr>'}
     </tbody></table></div>
     <h3 class="section-title">승인된 대리점 사용자 (${approved.length})</h3>
     <div class="card"><table class="tbl"><thead><tr><th>사용자</th><th>대리점</th><th>구분</th><th></th></tr></thead><tbody>
-      ${approved.length ? approved.map((u) => `<tr data-u="${u.id}"><td>${who(u)}</td><td><select class="ag">${opts(u.agency_code)}</select></td><td>${roleSel(u.agency_role)}</td>
+      ${approved.length ? approved.map((u) => `<tr data-u="${u.id}"><td>${who(u)}</td><td><select class="ag ag-search">${opts(u.agency_code)}</select></td><td>${roleSel(u.agency_role)}</td>
         <td style="text-align:right;white-space:nowrap"><button class="btn small" data-act="move">변경 저장</button> <button class="btn small danger" data-act="reject">이용 중지</button></td></tr>`).join('')
         : '<tr><td colspan="4"><div class="empty">아직 없습니다.</div></td></tr>'}
     </tbody></table></div>
@@ -1781,7 +1781,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=03f3041'), import('./docfill.js?v=03f3041'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=74d8b46'), import('./docfill.js?v=74d8b46'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1927,7 +1927,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=03f3041')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=74d8b46')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부의 첫 장에 걸쳐</span><span><b>간인</b> 쪽과 쪽 사이에 걸쳐</span></div>
@@ -2446,7 +2446,7 @@ async function cleanSeal(file) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=03f3041');
+  const V = await import('./viewer.js?v=74d8b46');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2551,7 +2551,7 @@ async function ctEditView(main) {
     <div class="ct-edit">
       <form class="card ct-form" id="ctf">
         <label class="field"><span>대리점</span>${c ? `<input value="${esc(c.agency_code)} ${esc(agencyName(c.agency_code))}" disabled>` :
-          `<select name="agency_code" required><option value="">선택하세요</option>${mine.map((a) => `<option value="${esc(a.code)}">${esc(a.code)} · ${esc(a.name)}</option>`).join('')}</select>`}</label>
+          `<select name="agency_code" class="ag-search" required><option value="">선택하세요</option>${mine.map((a) => `<option value="${esc(a.code)}">${esc(a.code)} · ${esc(a.name)}</option>`).join('')}</select>`}</label>
         <label class="field"><span>종류</span><select name="kind">${['특약서', '변경 합의서', '부속 합의서', '기타'].map((k) => `<option ${c?.kind === k ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
         <label class="field"><span>계약명</span><input name="title" required maxlength="120" value="${esc(c?.title || '')}" placeholder="예) 2027년 수수료 특약서"></label>
         <label class="field"><span>대리점 안내 문구 (선택)</span><textarea name="memo" rows="3" placeholder="예) 12월 정산부터 적용되는 특약입니다.">${esc(c?.memo || '')}</textarea></label>
@@ -2894,3 +2894,61 @@ async function ctSign(c, seal, pw) {
     p_method: '파트너센터 로그인 + 비밀번호 재확인', p_ua: ua });
   if (error) throw error;
 }
+
+// ---------- 대리점 검색 선택: 코드나 대리점명 일부를 입력해 빠르게 찾기 ----------
+// <select class="ag-search">는 검색 입력칸으로 바뀌고(원래 select는 숨겨진 채 값만 보관), .agency-pick 체크 목록에는 검색칸이 붙습니다.
+const agNorm = (s) => String(s || '').toLowerCase().replace(/㈜|\(주\)|주식회사|[\s·()]/g, '');
+const agMatch = (code, text, q) => !q || agNorm(code).startsWith(q) || agNorm(String(text).split(' · ').slice(1).join(' · ') || text).includes(q);
+function agSearchify(sel) {
+  if (sel.dataset.enh) return; sel.dataset.enh = '1';
+  const box = document.createElement('div'); box.className = 'ag-combo';
+  const inp = document.createElement('input'); Object.assign(inp, { type: 'text', autocomplete: 'off', placeholder: '코드 또는 대리점명 입력' });
+  const list = document.createElement('div'); list.className = 'ag-list'; list.hidden = true;
+  sel.parentNode.insertBefore(box, sel); box.append(inp, list, sel);
+  sel.hidden = true; sel.tabIndex = -1; if (sel.required) { sel.required = false; inp.required = true; }
+  const label = () => (sel.value ? sel.selectedOptions[0]?.textContent || '' : '');
+  let hits = [], cur = 0, prev = sel.value;
+  inp.value = label();
+  const draw = (q) => {
+    hits = [...sel.options].filter((o) => o.value && agMatch(o.value, o.textContent, q));
+    if (q) hits.sort((a, b) => (agNorm(b.value) === q) - (agNorm(a.value) === q));
+    cur = Math.max(0, Math.min(cur, hits.length - 1));
+    list.innerHTML = hits.length ? hits.map((o, i) => `<div class="ag-item${i === cur ? ' on' : ''}${o.value === sel.value ? ' sel' : ''}" data-i="${i}">${esc(o.textContent)}</div>`).join('')
+      : '<div class="ag-none">일치하는 대리점이 없습니다</div>';
+    list.hidden = false;
+    list.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
+  };
+  const pick = (o) => {
+    if (!o) return;
+    sel.value = o.value; inp.value = o.textContent; list.hidden = true; inp.blur();
+    if (sel.value !== prev) { prev = sel.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  };
+  inp.onfocus = () => { inp.select(); cur = Math.max(0, [...sel.options].filter((o) => o.value).findIndex((o) => o.value === sel.value)); draw(''); };
+  inp.oninput = (e) => { e.stopPropagation(); cur = 0; draw(agNorm(inp.value)); };
+  inp.onchange = (e) => e.stopPropagation(); // 검색칸 자체 변경은 바깥 화면에 알리지 않음(값은 select로만)
+  inp.onblur = () => setTimeout(() => { list.hidden = true; inp.value = label(); }, 120);
+  inp.onkeydown = (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (list.hidden) return draw(agNorm(inp.value));
+      cur = (cur + (e.key === 'ArrowDown' ? 1 : -1) + hits.length) % Math.max(hits.length, 1);
+      list.querySelectorAll('.ag-item').forEach((el, i) => el.classList.toggle('on', i === cur)); list.querySelector('.on')?.scrollIntoView({ block: 'nearest' }); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (!list.hidden) pick(hits[cur]); }
+    else if (e.key === 'Escape') { list.hidden = true; inp.value = label(); inp.blur(); }
+  };
+  list.onmousedown = (e) => e.preventDefault(); // 입력칸 포커스 유지
+  list.onclick = (e) => { e.preventDefault(); // <label> 안에 있을 때 클릭이 입력칸으로 다시 가지 않게
+    const it = e.target.closest('.ag-item'); if (it) pick(hits[+it.dataset.i]); };
+}
+function agFilterify(pickBox) {
+  if (pickBox.dataset.enh) return; pickBox.dataset.enh = '1';
+  const inp = document.createElement('input'); Object.assign(inp, { type: 'text', autocomplete: 'off', className: 'ag-filter', placeholder: '코드 또는 대리점명으로 찾기 (전체 선택·해제는 보이는 대리점에만 적용)' });
+  pickBox.parentNode.insertBefore(inp, pickBox);
+  inp.oninput = () => { const q = agNorm(inp.value);
+    pickBox.querySelectorAll('label').forEach((l) => { const c = l.querySelector('input'); l.hidden = !agMatch(c?.value, l.textContent, q); }); };
+  inp.onkeydown = (e) => { if (e.key === 'Enter') e.preventDefault(); };
+}
+const agEnhance = () => {
+  document.querySelectorAll('select.ag-search:not([data-enh])').forEach(agSearchify);
+  document.querySelectorAll('.agency-pick:not([data-enh])').forEach(agFilterify);
+};
+new MutationObserver(agEnhance).observe(document.body, { childList: true, subtree: true });
+agEnhance();

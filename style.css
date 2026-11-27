@@ -765,3 +765,19 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .hq-item .cnt { background: var(--danger); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; }
 .hq-ic { font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { .hq-caret { transition: none; } }
+
+/* ---------- 대리점 검색 선택 ---------- */
+.ag-combo { position: relative; }
+.ag-combo input { width: 100%; }
+.bar .ag-combo { min-width: 260px; }
+.tbl .ag-combo { min-width: 210px; }
+.ag-list { position: absolute; z-index: 50; left: 0; right: 0; top: calc(100% + 4px); max-height: 300px; overflow: auto;
+  background: var(--card); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 8px 24px rgba(16,24,40,.12); padding: 4px; }
+.ag-item { padding: 7px 10px; border-radius: 6px; font-size: 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-item.sel { font-weight: 600; }
+.ag-item.on, .ag-item:hover { background: var(--brand-soft); color: var(--brand); }
+.ag-list[hidden] { display: none; }
+.ag-none { padding: 8px 10px; color: var(--muted); font-size: 13.5px; }
+.ag-filter { width: 100%; margin-bottom: 6px; }
+.agency-pick label[hidden] { display: none; }
+@media (max-width: 720px) { .bar .ag-combo { min-width: 0; width: 100%; } }
