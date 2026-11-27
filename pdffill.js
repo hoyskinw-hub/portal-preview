@@ -83,3 +83,16 @@ export async function buildPdf(lib, tplBytes, layout, fontBytes, data, title = '
   out.setTitle(title); out.setProducer('대리점 소통 포털'); out.setCreator('KICC 채널영업2팀');
   return out.save();
 }
+
+// 날인 가이드용: 출력 PDF에서 서류별 쪽 범위(1부터) { 키: { from, to } }
+export function docPages(layout, data, offset = 0) {
+  const plan = pagePlan(layout, data);
+  const owner = (src) => (layout.docs || []).find((d) => src >= d.from && src <= d.to)?.k;
+  const out = {};
+  plan.forEach(({ src }, i) => {
+    const k = owner(src); if (!k) return;
+    const n = offset + i + 1;
+    out[k] = out[k] ? { from: Math.min(out[k].from, n), to: Math.max(out[k].to, n) } : { from: n, to: n };
+  });
+  return { pages: out, count: plan.length };
+}

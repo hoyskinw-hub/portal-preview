@@ -1692,13 +1692,76 @@ async function makePdf(which, info, app) {
   }
   saveBlob(new Blob([bytes], { type: 'application/pdf' }), title);
 }
+// ---------- 날인 가이드 (PDF 내려받기 전) ----------
+function sealSteps(info) {
+  const corp = info.corp_type === '법인';
+  const seal = corp ? '법인인감' : '대표자 인감';
+  const staff = staffList(info);
+  const L = [
+    { k: 'apply_1', t: '대리점 개설 신청서', n: 1, s: [`2쪽 하단 <b>신청인 대표자 (인)</b>에 ${seal}`] },
+    { k: 'c_main', t: '대리점 계약서', n: 2, s: ['모든 쪽 사이에 <b>간인</b>(두 쪽에 걸쳐 찍기)', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`,
+      ...(corp ? ['같은 쪽 <b>"연대보증인" 이름 (인)</b>에 대표자 <b>개인 인감</b>'] : [])] },
+    { k: 'c_fee', t: '가맹점관리수수료 및 DDC 지급수수료 관련 특약서', n: 2, s: ['모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
+    { k: 'c_ddc', t: 'DDC 매출전표 투입업무 특약서', n: 2, s: ['모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
+    { k: 'c_lease', t: '신용카드조회기 임대차 계약서', n: 2, s: ['모든 쪽 사이 <b>간인</b>', `마지막 쪽 <b>"대리점" 대표자 (인)</b>에 ${seal}`] },
+    { k: 'f_bank', t: '거래처 등록 및 입금계좌(인감) 신고서', n: 1, s: ['<b>&lt;신고인&gt;</b> 칸에 주소·상호·대표자를 <b>자필</b>로 기재',
+      `<b>${corp ? '법인인감' : '대표자 인감'}</b> 칸에 ${seal}`, '<b>통장인감</b> 칸에 통장에 등록된 도장', ...(corp && info.use_seal ? ['<b>사용인감</b> 칸에 사용인감'] : [])] },
+    { k: 'f_sec', t: '보안 서약서 (대리점용)', n: 1, s: [`마지막 쪽 <b>대표자 (인)</b>에 ${seal}`] },
+    { k: 'f_secp', t: '개인정보보호(보안) 서약서 (개인용)', n: staff.length || 1, s: [`각 장 하단 <b>서약인 (인)</b>에 본인이 서명 또는 날인${staff.length ? ` — ${staff.map(esc).join(', ')}` : ''}`] },
+    ...(corp && info.use_seal ? [{ k: 'f_seal', t: '사용인감계', n: 1, s: ['<b>사용인감</b> 네모 칸에 앞으로 쓸 도장', '하단 <b>대표이사 (인)</b>에 법인인감'] }] : []),
+    ...(corp ? [{ k: 'f_guar', t: '연대보증승락서', n: 1, s: ['하단 <b>연대보증인 이름 (인)</b>에 대표자 <b>개인 인감</b> (인감증명서와 같은 도장)'] }] : []),
+    { k: 'notice', t: '가맹점모집인 등록신청인 고지사항', n: 1, s: ['7개 문항을 <b>자필</b>로 예/아니오에 ☑', '하단 <b>신청인 서명 및 날인</b>'] },
+  ];
+  return L;
+}
+async function sealGuide(info, app, which = 'all') {
+  let pages = {};
+  try {
+    const K = await pdfKit();
+    const data = K.docData(info, { appNo: app.id });
+    const fl = await tplFile('forms.json', 'json');
+    const off = which === 'all' ? 2 : 0;
+    const r = K.docPages(fl, data, off);
+    pages = { ...r.pages, apply_1: { from: 1, to: 2 }, notice: { from: off + r.count + 1, to: off + r.count + 1 } };
+  } catch (e) { /* 쪽 번호 없이 안내 */ }
+  const corp = info.corp_type === '법인';
+  const rows = sealSteps(info).filter((x) => which === 'all' || (which === 'apply' ? x.k === 'apply_1' : !['apply_1', 'notice'].includes(x.k)));
+  const pg = (k) => { const p = pages[k]; return p && which !== 'apply' || k === 'apply_1' ? (p ? (p.from === p.to ? `${p.from}쪽` : `${p.from}~${p.to}쪽`) : '') : ''; };
+  return `<div class="sg">
+    <div class="sg-key"><div><b>${corp ? '법인인감' : '대표자 인감'}</b> 인감증명서와 같은 도장</div><div><b>간인</b> 겹친 두 쪽에 걸쳐 찍기</div><div><b>2부</b> 계약서는 2부 모두 각각 날인</div></div>
+    <table class="tbl sg-tbl"><tr><th>서류</th><th>부수</th><th>쪽</th><th>날인·기재 방법</th></tr>
+    ${rows.map((x) => `<tr><td><b>${esc(x.t)}</b></td><td class="c">${x.n}부</td><td class="c">${pg(x.k)}</td><td><ul>${x.s.map((t) => `<li>${t}</li>`).join('')}</ul></td></tr>`).join('')}</table>
+    <p class="hint">${which === 'all' ? '쪽 번호는 [전체 서류 한 번에] PDF 기준입니다.' : which === 'forms' ? '쪽 번호는 [계약서·신고서·서약서] PDF 기준입니다.' : ''}
+      ${info.doc_date ? '' : ' 작성일을 비워 두어 날짜 칸이 빈칸입니다. 날인하는 날짜를 손으로 적어 주세요.'}
+      ${info.use_seal && corp ? '' : ''} 날인한 원본은 [원본 서류 우편 발송] 목록과 함께 보내 주세요.</p></div>`;
+}
+function printGuide(html, info) {
+  const w = window.open('', '_blank'); if (!w) return toast('팝업이 차단됐습니다. 브라우저에서 팝업을 허용해 주세요.', true);
+  w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>날인 가이드_${esc(info.agency || '')}</title><style>
+    @page{size:A4;margin:14mm}body{font-family:'Malgun Gothic',sans-serif;font-size:11.5px;color:#000}h1{font-size:18px;text-align:center;margin:0 0 10px}
+    table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:5px 7px;vertical-align:top}th{background:#eee}td.c{text-align:center;white-space:nowrap}
+    ul{margin:0;padding-left:16px}.sg-key{display:flex;gap:14px;margin-bottom:8px;font-size:11px}.hint{font-size:11px;margin-top:8px}.tool{text-align:center;margin:8px}@media print{.tool{display:none}}</style></head>
+    <body><div class="tool"><button onclick="print()">🖨 인쇄</button></div><h1>날인 가이드 — ${esc(info.agency || '')}</h1>${html}</body></html>`);
+  w.document.close();
+}
+function guideThenDownload(info, app, which, btn) {
+  sealGuide(info, app, which).then((html) => {
+    modal('출력 전 날인 가이드', `${html}<div class="sg-print"><button type="button" class="btn small" id="sgPrint">🖨 가이드 인쇄</button></div>`, async () => {
+      await makePdf(which, info, app); toast('PDF를 내려받았습니다.');
+    }, '확인했어요 · PDF 내려받기', true);
+    document.querySelector('#sgPrint')?.addEventListener('click', () => printGuide(html, info));
+  });
+}
+
 async function openNoticePdf() {
   const { data, error } = await sb.storage.from(BUCKET).createSignedUrl('templates/notice.pdf', 600);
   if (error) return fail(error);
   window.open(data.signedUrl, '_blank');
 }
 function bindMakeDocs(root, info, app) {
+  root.querySelectorAll('[data-guide]').forEach((b) => b.onclick = () => guideThenDownload(info, app, 'all'));
   root.querySelectorAll('[data-pdf]').forEach((b) => b.onclick = async () => {
+    if (!isAdmin()) return guideThenDownload(info, app, b.dataset.pdf);   // 대리점은 날인 가이드를 먼저 보여줌
     const t = b.innerHTML; b.disabled = true; b.textContent = 'PDF 만드는 중…';
     try { await makePdf(b.dataset.pdf, info, app); toast('PDF를 내려받았습니다.'); } catch (e) { fail(e); }
     b.disabled = false; b.innerHTML = t;
@@ -1887,6 +1950,7 @@ async function viewOnboard(main) {
         <div class="ob-doc-body">${S.apply.doc ? `<button class="btn small primary" data-pdf="all">⬇ 전체 서류 한 번에 (PDF)</button>
           <button class="btn small" data-pdf="apply">개설 신청서</button>
           <button class="btn small" data-pdf="forms">계약서·신고서·서약서</button>
+          <button class="btn small" data-guide>📋 날인 가이드</button>
           <ul class="ob-tips"><li>계약서 4종은 <b>2부씩</b> 출력해 페이지 사이 <b>간인</b>과 서명란 <b>직인</b>을 찍어 주세요.</li>
             <li>개인 보안서약서는 대표자와 종업원 ${staffList(info).length || 1}명분이 들어 있습니다. 각자 서명·날인합니다.</li>
             <li>입금계좌 신고서의 &lt;신고인&gt; 칸과 인감 칸은 손으로 기재·날인합니다. 통장 인감과 같은 도장을 쓰세요.</li>
