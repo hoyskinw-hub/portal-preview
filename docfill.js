@@ -49,7 +49,7 @@ export function docData(d, opt = {}) {
     mgr_dept: s(d.mgr_dept), mgr_name: s(d.mgr_name), mgr_tel: s(d.mgr_tel),
     date: krDate(d.doc_date), recv_date: opt.recvDate || '20　 .　 .　 .',
     y1: String(y), y2: String(y + 1), y3: String(y + 2),
-    use_seal: !!d.use_seal,
+    use_seal: !!d.use_seal && d.corp_type === '법인',   // 사용인감계는 법인만
     staff: (staffList(d).length ? staffList(d) : ['']).map((name) => ({ name, agency: s(d.agency), date: krDate(d.doc_date) })),
   };
   // PDF 출력용: 작성일 칸(년·월·일), 법인 여부(연대보증은 법인만)

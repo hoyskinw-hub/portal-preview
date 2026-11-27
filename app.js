@@ -1562,7 +1562,7 @@ const OB_INFO = [
   { t: '거래대금 입금계좌·거래 담당자', f: [
     { k: 'bank', l: '은행명', req: 1 }, { k: 'branch', l: '지점명' }, { k: 'holder', l: '예금주', req: 1 }, { k: 'account', l: '계좌번호', req: 1 },
     { k: 'mgr_dept', l: '담당 부서' }, { k: 'mgr_name', l: '담당자' }, { k: 'mgr_tel', l: '담당자 전화' },
-    { k: 'use_seal', l: '법인인감 외 사용인감을 따로 씁니다 (사용인감계 추가)', type: 'check', wide: 1 }] },
+    { k: 'use_seal', l: '법인인감 외 사용인감을 따로 씁니다 (사용인감계 추가, 법인만)', type: 'check', wide: 1, corp: 1 }] },
   { t: '서류 작성일', hint: '비워 두면 날짜 칸이 빈칸으로 출력되어 날인할 때 손으로 적을 수 있습니다.', f: [{ k: 'doc_date', l: '신청서·계약서·서약서 작성일', type: 'date' }] },
 ];
 const OB_REQ_F = OB_INFO.flatMap((s) => s.f.filter((f) => f.req));
@@ -1594,7 +1594,7 @@ function mailItems(d = {}) {
     ['f_sec', '보안서약서 (대리점용)', 1, '대표자 날인'],
     ['f_secp', '보안서약서 (개인용)', staff, '대표자 포함 VAN 업무 임직원 각자 서명'],
     ...(corp ? [['f_guar', '연대보증승락서', 1, '연대보증인(대표자) 날인']] : []),
-    ...(d.use_seal ? [['f_seal', '사용인감계', 1, '사용인감 날인']] : []),
+    ...(corp && d.use_seal ? [['f_seal', '사용인감계', 1, '사용인감 날인']] : []),
     ['notice', '가맹점모집인 등록신청인 고지사항', 1, '자필로 체크 후 서명·날인'],
     ['g', '발급·사본 서류'],
     ['biz_reg', '사업자등록증 사본', 2, ''],
@@ -1783,6 +1783,8 @@ function viewInfoEdit(main, app, doc) {
   const guarCheck = () => {   // 연대보증인 칸은 법인일 때만 보임
     const v = readInfo(f);
     if (guarSec) guarSec.hidden = v.corp_type !== '법인';
+    const seal = f.querySelector('[name=use_seal]')?.closest('label');
+    if (seal) seal.hidden = v.corp_type !== '법인';
   };
   f.addEventListener('change', guarCheck); guarCheck();
   main.querySelector('#guarRep').onclick = () => {
@@ -1791,7 +1793,7 @@ function viewInfoEdit(main, app, doc) {
   f.onsubmit = async (e) => {
     e.preventDefault();
     const v = readInfo(f);
-    if (v.corp_type !== '법인') Object.assign(v, { g_name: '', g_birth: '', g_addr: '' });
+    if (v.corp_type !== '법인') Object.assign(v, { g_name: '', g_birth: '', g_addr: '', use_seal: false });
     const miss = OB_REQ_F.filter((x) => reqKeys(v).includes(x.k) && !String(v[x.k] ?? '').trim()).map((x) => x.l);
     try {
       const r = doc ? await sb.from('onboard_docs').update({ data: v }).eq('id', doc.id)
