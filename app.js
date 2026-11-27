@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=8686c5f';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=0e87df6';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -326,7 +326,7 @@ async function render() {
   if (!isProspect()) showLoginBrief(isAdmin()
     ? [['inbox', '답변이 필요한 문의', qCnt], ['contracts', '본사 날인이 필요한 전자계약', ctCnt], ['users', '가입 승인 대기', pendingCnt], ['onboarding', '검토할 개설 신청', obPending]]
     : [['board', '답변이 도착한 문의', qCnt], ['notices', '새 공지사항', newNotice || 0], ['contracts', '날인할 전자계약', ctReady ? ctCnt : 0], ['myagency', '직원 가입 승인 대기', memberPending]],
-  goTab);
+  goTab, { seenNotice: safeLS.get(seenKey) || '1970-01-01' });
   if (st.tab === 'notices') safeLS.set(seenKey, new Date().toISOString());
   const main = app.querySelector('#main');
   main.innerHTML = '<div class="empty">불러오는 중…</div>';
@@ -755,22 +755,79 @@ function bindMdEditors(root) {
   });
 }
 
-// 로그인 후 첫 화면에서 한 번만(브라우저 창 기준) 새 알림 요약을 띄운다
-function showLoginBrief(items, go) {
+// 로그인 후 첫 화면에서 한 번만(브라우저 창 기준) 새 알림 요약을 띄운다. 항목을 누르면 해당 건이 펼쳐지고, 건을 누르면 바로 열림
+async function briefDetails(k, ctx) {
+  const last = (p) => (p.comments || []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at)).pop();
+  const ag = (code) => `${code} ${agencyName(code)}`;
+  if (k === 'inbox') {
+    const { data } = await sb.from('posts').select('id,title,agency_code,last_activity,comments(author_role,created_at)').eq('kind', 'question').order('last_activity', { ascending: false }).limit(200);
+    return (data || []).filter((p) => { const c = last(p); return !c || c.author_role !== 'admin'; })
+      .map((p) => ({ t: p.title, sub: `${ag(p.agency_code)} · ${last(p) ? '추가 문의' : '새 문의'} · ${fmt(p.last_activity)}`, nav: { tab: 'inbox', postId: p.id } }));
+  }
+  if (k === 'board') {
+    const { data } = await sb.from('posts').select('id,title,last_activity,comments(author_role,created_at,body)').eq('agency_code', me.agency_code).eq('kind', 'question').order('last_activity', { ascending: false }).limit(100);
+    const ans = (data || []).filter((p) => last(p)?.author_role === 'admin');
+    const { mine } = await readMap(ans.map((p) => p.id));
+    return ans.filter((p) => !mine[p.id] || new Date(mine[p.id]) < new Date(last(p).created_at))
+      .map((p) => ({ t: p.title, sub: `답변: ${String(last(p).body || '').replace(/\s+/g, ' ').slice(0, 40)} · ${fmt(last(p).created_at)}`, nav: { tab: 'board', postId: p.id } }));
+  }
+  if (k === 'contracts') {
+    const { data } = await sb.from('contracts').select('id,title,kind,agency_code,signed_at,sent_at').eq('status', isAdmin() ? 'agency_signed' : 'sent').order('updated_at', { ascending: false }).limit(20);
+    return (data || []).map((c) => ({ t: `${c.title} (${c.kind})`, sub: isAdmin() ? `${ctNo(c.id)} · ${ag(c.agency_code)} · 대리점 날인 ${fmt(c.signed_at)}` : `${ctNo(c.id)} · 본사 요청 ${fmt(c.sent_at)}`, nav: { tab: 'contracts', ctId: c.id } }));
+  }
+  if (k === 'users') {
+    const { data } = await sb.from('profiles').select('contact_name,email,requested_name,requested_code,requested_role,created_at').eq('status', 'pending').order('created_at', { ascending: false }).limit(20);
+    return (data || []).map((u) => ({ t: `${u.contact_name || u.email}${u.requested_name ? ` · ${u.requested_name}` : ''}${u.requested_code ? `(${u.requested_code})` : ''}`,
+      sub: `${u.requested_role === 'prospect' ? '신규 대리점' : u.requested_role === 'owner' ? '대표자' : '직원'} 가입 신청 · ${fmt(u.created_at)}`, nav: { tab: 'users' } }));
+  }
+  if (k === 'onboarding') {
+    const { data } = await sb.from('onboard_apps').select('id,company_name,ceo_name,submitted_at').eq('status', 'submitted').order('submitted_at', { ascending: false }).limit(20);
+    return (data || []).map((a) => ({ t: a.company_name || '(상호 미입력)', sub: `대표 ${a.ceo_name || '-'} · 제출 ${fmt(a.submitted_at)}`, nav: { tab: 'onboarding', obId: a.id } }));
+  }
+  if (k === 'notices') {
+    const { data } = await sb.from('notices').select('id,title,created_at').gt('created_at', ctx.seenNotice).order('created_at', { ascending: false }).limit(20);
+    return (data || []).map((n) => ({ t: n.title, sub: fmt(n.created_at), nav: { tab: 'notices', noticeId: n.id } }));
+  }
+  if (k === 'myagency') {
+    const { data } = await sb.rpc('my_members');
+    return (data || []).filter((m) => m.status === 'pending').map((m) => ({ t: m.contact_name || m.email || '직원', sub: `직원 가입 신청${m.created_at ? ' · ' + fmt(m.created_at) : ''}`, nav: { tab: 'myagency' } }));
+  }
+  return [];
+}
+function showLoginBrief(items, go, ctx = {}) {
   const key = `portal_brief_${me.id}`;
   try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { return; }
   const list = items.filter(([, , n]) => n > 0);
   if (!list.length) return;
   const wrap = document.createElement('div'); wrap.className = 'modal-bg';
   wrap.innerHTML = `<div class="modal card brief" role="dialog" aria-modal="true"><h3>🔔 새 알림 ${list.reduce((a, [, , n]) => a + n, 0)}건</h3>
-    <p class="hint">${esc(me.contact_name || '')}님, 확인이 필요한 항목입니다.</p>
-    <ul class="brief-list">${list.map(([k, l, n]) => `<li><button type="button" data-go="${k}"><span>${esc(l)}</span><b>${n}건</b><i>바로 가기 ›</i></button></li>`).join('')}</ul>
+    <p class="hint">${esc(me.contact_name || '')}님, 확인이 필요한 항목입니다. 항목을 누르면 내용을 볼 수 있습니다.</p>
+    <ul class="brief-list">${list.map(([k, l, n], i) => `<li data-k="${k}"><button type="button" class="brief-row" aria-expanded="false"><span class="brief-car">▸</span><span>${esc(l)}</span><b>${n}건</b></button>
+      <div class="brief-det" hidden></div></li>`).join('')}</ul>
     <div class="modal-btns"><button type="button" class="btn primary" data-x>확인</button></div></div>`;
   document.body.appendChild(wrap);
   const close = () => wrap.remove();
+  const open = (nav) => { close(); resetView(); Object.assign(st, { q: '', filter: 'all' }, nav); window.scrollTo(0, 0); render(); };
   wrap.querySelector('[data-x]').onclick = close;
   wrap.onclick = (e) => { if (e.target === wrap) close(); };
-  wrap.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => { close(); go(b.dataset.go); });
+  wrap.querySelectorAll('.brief-list > li').forEach((li) => {
+    const btn = li.querySelector('.brief-row'), det = li.querySelector('.brief-det'), k = li.dataset.k;
+    let loaded = false;
+    btn.onclick = async () => {
+      const on = det.hidden; det.hidden = !on; btn.setAttribute('aria-expanded', String(on)); li.classList.toggle('open', on);
+      if (!on || loaded) return;
+      det.innerHTML = '<div class="brief-load">불러오는 중…</div>';
+      try {
+        const rows = await briefDetails(k, ctx); loaded = true;
+        const shown = rows.slice(0, 5);
+        det.innerHTML = (shown.length ? shown.map((r, j) => `<button type="button" class="brief-item" data-j="${j}"><b>${esc(r.t)}</b><small>${esc(r.sub)}</small></button>`).join('')
+          : '<div class="brief-load">표시할 내용이 없습니다.</div>')
+          + `<button type="button" class="brief-all">${rows.length > 5 ? `외 ${rows.length - 5}건 · ` : ''}전체 보기 ›</button>`;
+        det.querySelectorAll('.brief-item').forEach((b) => b.onclick = () => open(shown[+b.dataset.j].nav));
+        det.querySelector('.brief-all').onclick = () => { close(); go(k); };
+      } catch (e) { det.innerHTML = '<div class="brief-load">내용을 불러오지 못했습니다.</div>'; }
+    };
+  });
   setTimeout(() => wrap.querySelector('[data-x]')?.focus(), 0);
 }
 
@@ -1817,7 +1874,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=8686c5f'), import('./docfill.js?v=8686c5f'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=0e87df6'), import('./docfill.js?v=0e87df6'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -1967,7 +2024,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=8686c5f')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=0e87df6')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2600,7 +2657,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=8686c5f');
+  const V = await import('./viewer.js?v=0e87df6');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2741,7 +2798,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=8686c5f');
+    const V = await import('./viewer.js?v=0e87df6');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
