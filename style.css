@@ -819,3 +819,25 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   50% { opacity: .35; box-shadow: 0 0 0 5px rgba(198,40,40,0); transform: scale(1.12); }
 }
 @media (prefers-reduced-motion: reduce) { .tab .cnt, .hq-item .cnt, .bnav .bi i { animation: none; } }
+
+/* ---------- 날인 가이드: 방법 / 서류별 구분, 계약서 한 화면 ---------- */
+.ag-list li.ag-grp { cursor: default; padding: 10px 4px 4px; font-size: 11.5px; font-weight: 700; color: var(--muted); letter-spacing: .02em; border: 0; background: none; }
+.ag-list li.ag-grp:first-child { padding-top: 2px; }
+.ag-list li.how { background: #f1f5fe; border: 1px dashed #b9c8ea; }
+.ag-list li.how.on { background: #e7eefe; border-color: #1f4fd1; border-style: solid; }
+.ag-list li.how.on b { color: #1f4fd1; }
+.ag-list li.doc { position: relative; padding-left: 34px; }
+.ag-tag { font-style: normal; display: inline-block; font-size: 10.5px; font-weight: 700; color: #1f4fd1; background: #dde7fd; border-radius: 4px; padding: 0 5px; margin-bottom: 3px; }
+.ag-no { font-style: normal; position: absolute; left: 8px; top: 9px; width: 18px; height: 18px; border-radius: 50%; background: #d5dbe4; color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; line-height: 1; }
+.ag-list li.doc.on .ag-no { background: #b3261e; }
+.ag-row .ag-page { position: absolute; top: 0; }
+.ag-ghostcopy { background: #fff; border: 1.5px dashed #9aa4b5; box-shadow: none; display: grid; place-items: center; }
+.ag-ghostcopy span { font-size: 11px; color: #6b7686; line-height: 1; }
+.ag-dots { position: absolute; text-align: center; font-size: 22px; color: #6b7686; line-height: 1; }
+.ag-stamp.mini { width: 36px; height: 36px; margin: -18px 0 0 -18px; font-size: 10.5px; line-height: 31px; }
+.ag-stamp.gy { border-color: #7c3aed; color: #7c3aed; background: rgba(124,58,237,.08); }
+.ag-stamp.gn { border-color: #d97706; color: #b45309; background: rgba(217,119,6,.08); }
+.ag-stamp.seq { animation-duration: 6s; }
+.ag-rowcap { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; font-size: 11.5px; color: #3a4556; line-height: 1.3; }
+.ag-rowcap i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #d0261b; margin-right: 4px; vertical-align: -1px; }
+.ag-rowcap i.gy { border-color: #7c3aed; } .ag-rowcap i.gn { border-color: #d97706; }
