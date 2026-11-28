@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=580add6';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=86d1144';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1457,6 +1457,10 @@ function ago(d) {
 let policyCache;
 async function loadPolicy() {
   if (policyCache !== undefined) return policyCache;
+  try {   // 사이트에서 편집한 내용(DB)이 있으면 그것을 씀
+    const { data, error } = await sb.from('site_settings').select('value').eq('key', 'policy').maybeSingle();
+    if (!error && data?.value) return (policyCache = data.value);
+  } catch { /* 표가 아직 없으면 아래 파일로 */ }
   try {
     // 저장소 캐시(기본 1시간) 때문에 옛 정책이 보이지 않게, 매번 새 주소로 받아 옴
     const { data: su, error } = await sb.storage.from(BUCKET).createSignedUrl('common/policy-summary.json', 60);
@@ -1520,6 +1524,62 @@ function bindPolicy(root, P) {
     resetView(); Object.assign(st, { tab: 'library', libPage: data?.id || null, libCat: null }); window.scrollTo(0, 0); render();
   });
 }
+// 정책 요약 편집 (총관리자): 카드·안내 문구·계산기 숫자를 사이트에서 바로 고침 → site_settings('policy')
+const TONES = [['green', '초록'], ['lime', '연두'], ['red', '빨강'], ['gray', '회색'], ['blue', '파랑']];
+const pairsTxt = (a) => (a || []).map(([x, y]) => `${x}:${y}`).join(', ');
+const pairsParse = (t) => String(t || '').split(/[,\n]/).map((x) => x.trim()).filter(Boolean).map((x) => {
+  const [a, b] = x.split(':').map((y) => Number(String(y).replace(/[^\d.]/g, ''))); if (!a || !b) throw new Error(`"${x}" 형식이 잘못됐습니다 (예: 100:300)`); return [a, b]; });
+function editPolicy(P0) {
+  const P = JSON.parse(JSON.stringify(P0 || { title: '', period: '', headline: '', cards: [], calc: { connect: {}, qr: {} }, notes: [] }));
+  const C = P.calc?.connect || {}, Q = P.calc?.qr || {};
+  const cardHtml = (c = {}, i) => `<fieldset class="pe-card"><legend>카드 ${i + 1} <button type="button" class="link danger" data-pedel>삭제</button></legend>
+    <div class="pe-g3"><label class="field"><span>꼬리표</span><input data-k="tag" value="${esc(c.tag || '')}" placeholder="Npay connect"></label>
+      <label class="field"><span>색</span><select data-k="tone">${TONES.map(([v, l]) => `<option value="${v}" ${c.tone === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="field"><span>기한 표시</span><input data-k="until" value="${esc(c.until || '')}" placeholder="~12.31"></label></div>
+    <div class="pe-g2"><label class="field"><span>작은 설명</span><input data-k="unit" value="${esc(c.unit || '')}" placeholder="가맹점 1곳·1대 설치 시 순수익"></label>
+      <label class="field"><span>큰 숫자</span><input data-k="big" value="${esc(c.big || '')}" placeholder="28.5만원"></label></div>
+    <label class="field"><span>세부 내용 (한 줄에 하나 · 팝업에서 보임)</span><textarea data-k="lines" rows="3">${esc((c.lines || []).join('\n'))}</textarea></label>
+    <label class="field"><span>'자세히' 누르면 열 자료실 페이지 제목 (비우면 없음)</span><input data-k="page" value="${esc(c.page || '')}"></label></fieldset>`;
+  modal('✏️ 정책 한눈에 편집', `<div class="pe">
+    <p class="hint">홈 '정책 한눈에' 카드, 로그인 정책 팝업, 수익 계산기에 쓰이는 내용입니다. 저장하면 바로 반영됩니다. 금액은 VAT 별도로 적어 주세요.</p>
+    <div class="pe-g2"><label class="field"><span>제목</span><input name="title" value="${esc(P.title || '')}" required></label>
+      <label class="field"><span>기간</span><input name="period" value="${esc(P.period || '')}" placeholder="2026.11.01 ~ 12.31"></label></div>
+    <label class="field"><span>한 줄 요약 (팝업 맨 위)</span><input name="headline" value="${esc(P.headline || '')}"></label>
+    <h4 class="pe-h">카드 <small class="muted">(홈에는 2×2로 보이니 4개를 권장)</small></h4>
+    <div id="peCards">${(P.cards || []).map(cardHtml).join('')}</div>
+    <button type="button" class="btn small" id="peAdd">＋ 카드 추가</button>
+    <h4 class="pe-h">수익 계산기 숫자 <small class="muted">(단위: 만원)</small></h4>
+    <div class="pe-g3"><label class="field"><span>Npay 장비당 받는 금액</span><input name="unitPay" type="number" step="0.1" value="${C.unitPay ?? ''}"></label>
+      <label class="field"><span>Npay 가맹점당 받는 금액</span><input name="storePay" type="number" step="0.1" value="${C.storePay ?? ''}"></label>
+      <label class="field"><span>Npay 장비값 실부담</span><input name="equip" type="number" step="0.1" value="${C.equip ?? ''}"></label></div>
+    <div class="pe-g2"><label class="field"><span>Npay 누적 인센티브 (대수:금액, 반복 지급)</span><input name="cum" value="${esc(pairsTxt(C.cum))}" placeholder="1000:1000"></label>
+      <label class="field"><span>Npay 달성 보너스 (대수:금액, 1회)</span><input name="milestones" value="${esc(pairsTxt(C.milestones))}" placeholder="3000:3000, 5000:5000"></label></div>
+    <div class="pe-g2"><label class="field"><span>이지QR 가맹점당 금액</span><input name="qrPer" type="number" step="0.1" value="${Q.per ?? ''}"></label>
+      <label class="field"><span>이지QR 우수 대리점 (곳:금액)</span><input name="qrTiers" value="${esc(pairsTxt(Q.tiers))}" placeholder="50:250, 100:600"></label></div>
+    <label class="field"><span>아래 안내 문구 (한 줄에 하나)</span><textarea name="notes" rows="4">${esc((P.notes || []).join('\n'))}</textarea></label>
+    <label class="pe-chk"><input type="checkbox" name="repop" checked> 대리점에게 정책 팝업 다시 띄우기 <small class="muted">(내용이 크게 바뀌었을 때. 끄면 오타 수정처럼 조용히 반영)</small></label>
+  </div>`, async (v, f) => {
+    const cards = [...f.querySelectorAll('.pe-card')].map((el) => { const g = (k) => el.querySelector(`[data-k="${k}"]`).value.trim();
+      return { tag: g('tag'), tone: g('tone'), big: g('big'), unit: g('unit'), until: g('until'), lines: g('lines').split('\n').map((x) => x.trim()).filter(Boolean), ...(g('page') ? { page: g('page') } : {}) }; })
+      .filter((c) => c.tag || c.big);
+    if (!cards.length) throw new Error('카드를 1개 이상 넣어 주세요.');
+    const num = (x) => (x === '' || x == null ? undefined : Number(x));
+    const value = { ...P, title: v.title.trim(), period: v.period.trim(), headline: v.headline.trim(), cards,
+      calc: { ...P.calc, connect: { ...C, unitPay: num(v.unitPay), storePay: num(v.storePay), equip: num(v.equip), per: (num(v.unitPay) || 0) + (num(v.storePay) || 0) - (num(v.equip) || 0), hw: 0,
+        cum: pairsParse(v.cum), milestones: pairsParse(v.milestones) }, qr: { ...Q, per: num(v.qrPer), tiers: pairsParse(v.qrTiers) } },
+      notes: v.notes.split('\n').map((x) => x.trim()).filter(Boolean),
+      version: v.repop ? `site-${new Date().toISOString().slice(0, 16)}` : (P.version || 'site') };
+    const { error } = await sb.from('site_settings').upsert({ key: 'policy', value }, { onConflict: 'key' });
+    if (error) throw new Error(error.message.includes('site_settings') ? '정책 편집 기능을 쓰려면 데이터베이스 변경(v12_site_settings.sql)을 먼저 적용해야 합니다.' : error.message);
+    policyCache = value; toast('정책 내용을 저장했습니다'); render();
+  }, '저장', true);
+  const box = document.querySelector('#peCards');
+  const bindDel = () => box.querySelectorAll('[data-pedel]').forEach((b) => b.onclick = () => { if (confirm('이 카드를 삭제할까요?')) { b.closest('.pe-card').remove(); renum(); } });
+  const renum = () => box.querySelectorAll('.pe-card legend').forEach((l, i) => l.firstChild.textContent = `카드 ${i + 1} `);
+  document.querySelector('#peAdd').onclick = () => { box.insertAdjacentHTML('beforeend', cardHtml({}, box.children.length)); bindDel(); };
+  bindDel();
+}
+
 // 정책 팝업: 대리점은 로그인할 때마다(브라우저 창 기준 1회) 보여 주고, [오늘 하루 보지 않기]를 누르면 그날은 안 보임
 const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
 function showPolicy(P, auto = false) {
@@ -1601,13 +1661,15 @@ function rankCard(snap) {
   if (view === 'hq') {   // 본사: 이름·수량 모두 공개, 우리 포털 대리점은 코드 표시
     const codeOf = new Map(agencies.map((a) => [rkNorm(a.name), a.code]));
     const ours = list.filter((r) => codeOf.has(rkNorm(r.n)));
-    const rowsHq = (st.rkAll ? list : list.slice(0, 6)).map((r) => { const c = codeOf.get(rkNorm(r.n));
+    const q = rkNorm(st.rkQ || '');
+    const rowsHq = (q ? list.filter((r) => rkNorm(r.n).includes(q)) : st.rkAll ? list : list.slice(0, 6)).map((r) => { const c = codeOf.get(rkNorm(r.n));
       return `<li class="${c ? 'ours' : ''}"><span class="rk-r">${medal(r.rank)}</span><span class="rk-nm">${esc(r.n)}</span>${c ? `<em class="rk-code">${esc(c)}</em>` : ''}<b>${r.v.toLocaleString()}</b></li>`; }).join('');
     return `<div class="card rk">
       <div class="rk-head"><h3>🏆 네이버 커넥트 설치 순위</h3><span class="rk-date">${esc(d)} 기준 · ${n.toLocaleString()}곳</span></div>
       <div class="rk-ctl">${modeSeg}${viewSeg}</div>
+      <input type="search" class="rk-q" placeholder="🔍 대리점명 찾기" value="${esc(st.rkQ || '')}">
       <p class="rk-ours">우리 포털 대리점 <b>${ours.length}곳</b>${ours[0] ? ` · 최고 <b>${ours[0].rank}위</b> ${esc(ours[0].n)}` : ''} <span class="muted">(코드 표시)</span></p>
-      <ol class="rk-list hq${st.rkAll ? ' all' : ''}">${rowsHq}</ol>
+      <ol class="rk-list hq${st.rkAll || q ? ' all' : ''}">${rowsHq || '<li class="rk-gap">찾는 대리점이 없습니다</li>'}</ol>
       <div class="rk-foot"><button type="button" class="link" data-rkall>${st.rkAll ? '접기' : `전체 ${n.toLocaleString()}곳 보기`}</button><span>🔒 총관리자만 보임</span><button type="button" class="link" data-rkpaste>갱신</button></div></div>`;
   }
   return `<div class="card rk">
@@ -1627,6 +1689,8 @@ function bindRank(root) {
   box.querySelectorAll('[data-rk]').forEach((b) => b.onclick = () => { st.rkMode = b.dataset.rk; redraw(); });
   box.querySelectorAll('[data-rkv]').forEach((b) => b.onclick = () => { st.rkView = b.dataset.rkv; redraw(); });
   box.querySelectorAll('[data-rkall]').forEach((b) => b.onclick = () => { st.rkAll = !st.rkAll; redraw(); });
+  const q = box.querySelector('.rk-q');
+  if (q) q.oninput = () => { st.rkQ = q.value; const pos = q.selectionStart; redraw(); const q2 = box.querySelector('.rk-q'); q2.focus(); q2.setSelectionRange(pos, pos); };
   const sel = box.querySelector('[data-rkag]'); if (sel) sel.onchange = () => { st.rkAg = sel.value; redraw(); };
   box.querySelectorAll('[data-rkpaste]').forEach((b) => b.onclick = () => modal('🏆 커넥트 설치 현황 갱신',
     `<p class="hint">매일 받는 <b>[KICC] 밴대리점 설치현황</b> 메일 내용을 처음부터 끝까지 복사해 그대로 붙여넣으세요. '누적설치 전체' 표를 읽어 기준일별로 저장합니다(같은 날짜는 덮어씀).</p>
@@ -1695,7 +1759,7 @@ async function viewHome(main, { pendingCnt }) {
 
     ${P || rkOn ? `<div class="h-polrow${rkOn ? ' two' : ''}">
     ${P ? `<section class="h-sec h-policy"><div class="h-box-head"><h3>📣 ${esc(P.title)} <small class="muted">${esc(P.period)}</small></h3>
-      <button class="link" data-polopen>💰 수익 계산해 보기 ›</button></div>${policyCardsHtml(P, true)}</section>` : ''}
+      <span class="h-pol-acts">${isSuper() ? '<button class="link" data-poledit>✏️ 편집</button>' : ''}<button class="link" data-polopen>💰 수익 계산해 보기 ›</button></span></div>${policyCardsHtml(P, true)}</section>` : ''}
     ${rkOn ? `<section class="h-sec h-rank" id="rkBox">${rankCard(rankSnap)}</section>` : ''}</div>` : ''}
 
     ${isOwner() && ownerPending && menuOn('myagency') ? `<button class="h-alert" data-go="myagency"><span class="t">👥 직원 가입 신청 <b>${ownerPending}건</b>이 승인을 기다리고 있습니다</span><span class="go">확인하기 ›</span></button>` : ''}
@@ -1732,6 +1796,7 @@ async function viewHome(main, { pendingCnt }) {
 
   const go = (patch) => { resetView(); Object.assign(st, { q: '', filter: 'all', libCat: null, libPage: null, libQ: '' }, patch); window.scrollTo(0, 0); render(); };
   bindRank(main);
+  main.querySelector('[data-poledit]')?.addEventListener('click', () => editPolicy(P));
   main.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => go({ tab: b.dataset.go }));
   main.querySelectorAll('[data-notice]').forEach((b) => b.onclick = () => go({ tab: 'notices', noticeId: Number(b.dataset.notice) }));
   main.querySelectorAll('[data-faq]').forEach((b) => b.onclick = () => go({ tab: 'faq', faqOpen: Number(b.dataset.faq) }));
@@ -2083,7 +2148,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=580add6'), import('./docfill.js?v=580add6'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=86d1144'), import('./docfill.js?v=86d1144'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2234,7 +2299,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=580add6')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=86d1144')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2874,7 +2939,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=580add6');
+  const V = await import('./viewer.js?v=86d1144');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -3016,7 +3081,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=580add6');
+    const V = await import('./viewer.js?v=86d1144');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
