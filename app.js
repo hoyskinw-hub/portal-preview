@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=1e4a50a';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=141f679';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1576,7 +1576,7 @@ function rkParse(text) {
 function rankCard(snap) {
   if (!snap) return `<div class="card rk"><div class="rk-head"><h3>🏆 네이버 커넥트 설치 순위</h3></div>
     <p class="rk-empty">아직 순위 데이터가 없습니다.</p><button class="btn small" data-rkpaste>설치 현황 붙여넣기</button></div>`;
-  const mode = st.rkMode || 't';
+  const mode = st.rkMode || 't', view = st.rkView || 'hq';
   const list = rkRank(snap.rows, mode);
   const opts = agencies.slice().sort((a, b) => String(a.code).localeCompare(String(b.code), 'ko', { numeric: true }));
   const found = (code) => { const a = agencies.find((x) => x.code === code); return a ? list.findIndex((r) => rkNorm(r.n) === rkNorm(a.name)) : -1; };
@@ -1596,21 +1596,37 @@ function rankCard(snap) {
     last = i;
   }
   const top = me ? Math.max(1, Math.ceil((me.rank / n) * 100)) : null;
+  const viewSeg = `<div class="rk-seg rk-view">${[['hq', '본사 보기'], ['ag', '대리점 미리보기']].map(([k, l]) => `<button type="button" data-rkv="${k}" class="${view === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const modeSeg = `<div class="rk-seg">${[['t', '누적'], ['m', '이번 달']].map(([k, l]) => `<button type="button" data-rk="${k}" class="${mode === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  if (view === 'hq') {   // 본사: 이름·수량 모두 공개, 우리 포털 대리점은 코드 표시
+    const codeOf = new Map(agencies.map((a) => [rkNorm(a.name), a.code]));
+    const ours = list.filter((r) => codeOf.has(rkNorm(r.n)));
+    const rowsHq = (st.rkAll ? list : list.slice(0, 8)).map((r) => { const c = codeOf.get(rkNorm(r.n));
+      return `<li class="${c ? 'ours' : ''}"><span class="rk-r">${medal(r.rank)}</span><span class="rk-nm">${esc(r.n)}</span>${c ? `<em class="rk-code">${esc(c)}</em>` : ''}<b>${r.v.toLocaleString()}</b></li>`; }).join('');
+    return `<div class="card rk">
+      <div class="rk-head"><h3>🏆 네이버 커넥트 설치 순위</h3><span class="rk-date">${esc(d)} 기준 · ${n.toLocaleString()}곳</span></div>
+      <div class="rk-ctl">${modeSeg}${viewSeg}</div>
+      <p class="rk-ours">우리 포털 대리점 <b>${ours.length}곳</b>${ours[0] ? ` · 최고 <b>${ours[0].rank}위</b> ${esc(ours[0].n)}` : ''} <span class="muted">(코드 표시)</span></p>
+      <ol class="rk-list hq${st.rkAll ? ' all' : ''}">${rowsHq}</ol>
+      <div class="rk-foot"><button type="button" class="link" data-rkall>${st.rkAll ? '접기' : `전체 ${n.toLocaleString()}곳 보기`}</button><span>🔒 총관리자만 보임</span><button type="button" class="link" data-rkpaste>갱신</button></div></div>`;
+  }
   return `<div class="card rk">
     <div class="rk-head"><h3>🏆 네이버 커넥트 설치 순위</h3><span class="rk-date">${esc(d)} 기준</span></div>
-    <div class="rk-ctl"><div class="rk-seg">${[['t', '누적'], ['m', '이번 달']].map(([k, l]) => `<button type="button" data-rk="${k}" class="${mode === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      <label class="rk-pick" title="이 대리점에게 보이는 화면으로 미리보기">👁 <select data-rkag>${opts.map((a) => `<option value="${esc(a.code)}" ${a.code === st.rkAg ? 'selected' : ''}>${esc(a.code)} ${esc(a.name)}${found(a.code) < 0 ? ' (자료 없음)' : ''}</option>`).join('')}</select></label></div>
+    <div class="rk-ctl">${modeSeg}${viewSeg}</div>
+    <div class="rk-ctl"><label class="rk-pick" title="이 대리점에게 보이는 화면으로 미리보기">👁 대리점 <select data-rkag>${opts.map((a) => `<option value="${esc(a.code)}" ${a.code === st.rkAg ? 'selected' : ''}>${esc(a.code)} ${esc(a.name)}${found(a.code) < 0 ? ' (자료 없음)' : ''}</option>`).join('')}</select></label></div>
     ${me ? `<div class="rk-me"><div class="rk-big">${me.rank}<small>위</small></div><div><div class="rk-who">${esc(ag?.name || me.n)}</div>
       <div class="rk-sub">${mode === 'm' ? '이번 달' : '누적'} <b>${me.v.toLocaleString()}대</b> · 상위 ${top}% · 전체 ${n.toLocaleString()}곳</div>
       <div class="rk-sub2">${mode === 'm' ? `누적 ${me.t.toLocaleString()}대` : `이번 달 +${me.m.toLocaleString()}대`} · 어제 +${me.d.toLocaleString()}대</div></div></div>`
       : `<p class="rk-empty">설치 현황에서 '${esc(ag?.name || '')}'을(를) 찾지 못했습니다. 대리점명이 다르게 적혀 있을 수 있습니다.</p>`}
     <ol class="rk-list">${html}</ol>
-    <div class="rk-foot"><span>🔒 다른 대리점명·수량은 가려짐 · 지금은 총관리자만 보임</span><button type="button" class="link" data-rkpaste>갱신</button></div></div>`;
+    <div class="rk-foot"><span>🔒 대리점에게는 본인 것만 보임 · 지금은 총관리자만</span><button type="button" class="link" data-rkpaste>갱신</button></div></div>`;
 }
 function bindRank(root) {
   const box = root.querySelector('#rkBox'); if (!box) return;
   const redraw = () => { box.innerHTML = rankCard(rankSnap); bindRank(root); };
   box.querySelectorAll('[data-rk]').forEach((b) => b.onclick = () => { st.rkMode = b.dataset.rk; redraw(); });
+  box.querySelectorAll('[data-rkv]').forEach((b) => b.onclick = () => { st.rkView = b.dataset.rkv; redraw(); });
+  box.querySelectorAll('[data-rkall]').forEach((b) => b.onclick = () => { st.rkAll = !st.rkAll; redraw(); });
   const sel = box.querySelector('[data-rkag]'); if (sel) sel.onchange = () => { st.rkAg = sel.value; redraw(); };
   box.querySelectorAll('[data-rkpaste]').forEach((b) => b.onclick = () => modal('🏆 커넥트 설치 현황 갱신',
     `<p class="hint">매일 받는 <b>[KICC] 밴대리점 설치현황</b> 메일 내용을 처음부터 끝까지 복사해 그대로 붙여넣으세요. '누적설치 전체' 표를 읽어 기준일별로 저장합니다(같은 날짜는 덮어씀).</p>
@@ -1626,6 +1642,12 @@ function bindRank(root) {
 
 async function viewHome(main, { pendingCnt }) {
   const admin = isAdmin();
+  // 네이버 커넥트 설치 순위 — 민감 자료라 지금은 총관리자만 (표가 없으면 카드 없음)
+  let rkOn = false;
+  if (isSuper()) {
+    const { data: rk, error: rke } = await sb.from('connect_ranks').select('base_date,rows,total,uploaded_by,uploaded_at').order('base_date', { ascending: false }).limit(1).maybeSingle();
+    rkOn = !rke; rankSnap = rk || null;
+  }
   const [pins, recent, pages, cats, mine] = await Promise.all([
     sb.from('notices').select('id,title,body,created_at,pinned,pin_until').eq('pinned', true).order('created_at', { ascending: false }).limit(10),
     sb.from('notices').select('id,title,pinned,pin_until,created_at').order('created_at', { ascending: false }).limit(6),
@@ -1654,11 +1676,7 @@ async function viewHome(main, { pendingCnt }) {
       <button class="h-stat" data-go="inbox"><b>${waiting}</b><span>답변 필요 문의</span></button>
       <button class="h-stat" data-go="users"><b>${pendingCnt}</b><span>가입 승인 대기</span></button>
       <button class="h-stat" data-go="${isSuper() ? 'agencies' : 'board'}"><b>${agencies.length}</b><span>${isSuper() ? '등록 대리점' : '담당 대리점'}</span></button></div>`;
-    if (isSuper()) {   // 네이버 커넥트 설치 순위 — 민감 자료라 지금은 총관리자만
-      const { data: rk, error: rke } = await sb.from('connect_ranks').select('base_date,rows,total,uploaded_by,uploaded_at').order('base_date', { ascending: false }).limit(1).maybeSingle();
-      if (!rke) side += `<div id="rkBox">${rankCard(rk)}</div>`;
-      rankSnap = rk || null;
-    }
+
   } else {
     const reads = await readMap(mine.data.map((p) => p.id));
     const unread = mine.data.filter((p) => !reads.mine[p.id] || new Date(reads.mine[p.id]) < new Date(p.last_activity));
@@ -1675,8 +1693,10 @@ async function viewHome(main, { pendingCnt }) {
       ${isSuper() ? '<div class="h-hero-btns"><button class="btn primary" data-new="notice">＋ 공지 작성</button><button class="btn" data-new="page">＋ 자료 등록</button></div>' : ''}
     </section>
 
+    ${P || rkOn ? `<div class="h-polrow${rkOn ? ' two' : ''}">
     ${P ? `<section class="h-sec h-policy"><div class="h-box-head"><h3>📣 ${esc(P.title)} <small class="muted">${esc(P.period)}</small></h3>
       <button class="link" data-polopen>💰 수익 계산해 보기 ›</button></div>${policyCardsHtml(P, true)}</section>` : ''}
+    ${rkOn ? `<section class="h-sec h-rank" id="rkBox">${rankCard(rankSnap)}</section>` : ''}</div>` : ''}
 
     ${isOwner() && ownerPending && menuOn('myagency') ? `<button class="h-alert" data-go="myagency"><span class="t">👥 직원 가입 신청 <b>${ownerPending}건</b>이 승인을 기다리고 있습니다</span><span class="go">확인하기 ›</span></button>` : ''}
     ${pins.data.length && menuOn('notices') ? `<section class="h-pins">${pins.data.map((n) => `<article class="h-pin" data-notice="${n.id}">
@@ -2063,7 +2083,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=1e4a50a'), import('./docfill.js?v=1e4a50a'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=141f679'), import('./docfill.js?v=141f679'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2214,7 +2234,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=1e4a50a')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=141f679')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2854,7 +2874,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=1e4a50a');
+  const V = await import('./viewer.js?v=141f679');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2996,7 +3016,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=1e4a50a');
+    const V = await import('./viewer.js?v=141f679');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);

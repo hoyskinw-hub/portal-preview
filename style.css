@@ -960,3 +960,22 @@ mark { background: #fff1a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .rk-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 .rk-foot .link { font-size: 12px; white-space: nowrap; flex-shrink: 0; }
 .rk-empty { font-size: 13px; color: var(--muted); margin: 8px 0; }
+
+/* ---------- 홈: 정책 한눈에(축소) + 설치 순위 나란히 ---------- */
+.h-polrow.two { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.h-polrow.two .h-sec { margin-top: 0; }
+.h-polrow.two .pol-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.h-polrow.two .pol-card { padding: 10px 12px 12px; border-top-width: 3px; }
+.h-polrow.two .pol-unit { margin-top: 6px; font-size: 12px; }
+.h-polrow.two .pol-cards.compact .pol-big { font-size: 20px; }
+.h-polrow.two .pol-more { font-size: 12px; }
+.h-rank .rk { margin-top: 0; }
+@media (max-width: 1000px) { .h-polrow.two { grid-template-columns: 1fr; } }
+.rk-view button { font-size: 12px; padding: 4px 8px; }
+.rk-ours { font-size: 12.5px; color: #3a4556; margin: 0 0 4px; }
+.rk-list.hq li { padding: 3px 8px; font-size: 12.5px; }
+.rk-list.hq li b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.rk-list.hq li.ours { background: #fff7e6; }
+.rk-list.hq.all { max-height: 260px; overflow-y: auto; }
+.rk-code { font-style: normal; font-size: 10.5px; font-weight: 700; color: #b45309; background: #fdecc8; border-radius: 4px; padding: 0 4px; flex-shrink: 0; }
+.rk-list.hq .rk-nm { min-width: 0; }
