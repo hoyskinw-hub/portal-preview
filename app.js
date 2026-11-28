@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=3c3716f';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=1e4a50a';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1544,6 +1544,86 @@ function showPolicyAuto(P) {
   setTimeout(tick, 300);
 }
 
+// =====================================================================
+//  네이버 커넥트 설치 순위 (홈 카드) — 다른 대리점명·수량은 가리고 '우리 대리점'만 공개
+// =====================================================================
+let rankSnap = null;
+const rkNorm = (s) => String(s || '').normalize('NFC').replace(/\(주\)|㈜|주식회사|\(유\)|유한회사|[\s().·,-]/g, '').toLowerCase();
+const rkTest = (n) => /테스트|test/i.test(n);
+function rkRank(rows, mode) {
+  const list = (rows || []).filter((r) => !rkTest(r.n)).map((r) => ({ ...r, v: mode === 'm' ? r.m : r.t })).sort((a, b) => b.v - a.v);
+  let rank = 0, prev = null;
+  list.forEach((r, i) => { if (r.v !== prev) { rank = i + 1; prev = r.v; } r.rank = rank; });
+  return list;
+}
+function rkParse(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  const base = (text.match(/(\d{4}-\d{2}-\d{2})/) || [])[1];
+  const hi = lines.findIndex((l) => /^대리점명\s+전일설치수량\s+이번달설치수량\s+누적설치수량\s*$/.test(l.trim()));
+  if (!base) throw new Error('기준일(예: 2026-11-27)을 찾지 못했습니다. 메일 내용을 처음부터 끝까지 붙여넣어 주세요.');
+  if (hi < 0) throw new Error("'누적설치 전체' 표를 찾지 못했습니다. 메일 내용을 처음부터 끝까지 붙여넣어 주세요.");
+  const num = (x) => { const v = String(x ?? '').replace(/[,\s]/g, ''); return v === '-' || v === '' ? 0 : Number(v) || 0; };
+  const rows = [];
+  for (const l of lines.slice(hi + 1)) {
+    const c = l.split(/\t| {2,}/).map((x) => x.trim()).filter((x, i) => i === 0 || x !== '');
+    if (c.length < 4 || !c[0]) { if (rows.length) break; continue; }
+    rows.push({ n: c[0], d: num(c[1]), m: num(c[2]), t: num(c[3]) });
+  }
+  if (!rows.length) throw new Error('표 안에 대리점 행이 없습니다.');
+  const tot = text.match(/\d{4}-\d{2}-\d{2}[^\t\n]*\t(\d+)/);
+  return { base_date: base, rows, total: tot ? Number(tot[1]) : rows.reduce((a, r) => a + r.t, 0) };
+}
+function rankCard(snap) {
+  if (!snap) return `<div class="card rk"><div class="rk-head"><h3>🏆 네이버 커넥트 설치 순위</h3></div>
+    <p class="rk-empty">아직 순위 데이터가 없습니다.</p><button class="btn small" data-rkpaste>설치 현황 붙여넣기</button></div>`;
+  const mode = st.rkMode || 't';
+  const list = rkRank(snap.rows, mode);
+  const opts = agencies.slice().sort((a, b) => String(a.code).localeCompare(String(b.code), 'ko', { numeric: true }));
+  const found = (code) => { const a = agencies.find((x) => x.code === code); return a ? list.findIndex((r) => rkNorm(r.n) === rkNorm(a.name)) : -1; };
+  if (!st.rkAg || found(st.rkAg) < 0) st.rkAg = (opts.find((a) => found(a.code) >= 0) || opts[0] || {}).code;
+  const ag = agencies.find((x) => x.code === st.rkAg), mi = found(st.rkAg), me = list[mi];
+  const n = list.length, d = snap.base_date.slice(5).replace('-', '.');
+  const medal = (r) => (r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : `${r}위`);
+  const mask = '<span class="rk-mask">●●●●● 대리점</span>';
+  // 보여줄 줄: 1~3위 + (우리 앞·뒤 1곳) — 우리가 상위권이면 1~5위
+  let idx = mi >= 0 && mi <= 3 ? [0, 1, 2, 3, 4] : [0, 1, 2, ...(mi >= 0 ? [mi - 1, mi, mi + 1] : [])];
+  idx = [...new Set(idx)].filter((i) => i >= 0 && i < n);
+  let html = '', last = -1;
+  for (const i of idx) {
+    if (last >= 0 && i > last + 1) html += '<li class="rk-gap">⋯</li>';
+    const r = list[i], mine = i === mi;
+    html += `<li class="${mine ? 'me' : ''}"><span class="rk-r">${medal(r.rank)}</span>${mine ? `<span class="rk-nm">${esc(r.n)}</span><b>${r.v.toLocaleString()}대</b>` : mask}</li>`;
+    last = i;
+  }
+  const top = me ? Math.max(1, Math.ceil((me.rank / n) * 100)) : null;
+  return `<div class="card rk">
+    <div class="rk-head"><h3>🏆 네이버 커넥트 설치 순위</h3><span class="rk-date">${esc(d)} 기준</span></div>
+    <div class="rk-ctl"><div class="rk-seg">${[['t', '누적'], ['m', '이번 달']].map(([k, l]) => `<button type="button" data-rk="${k}" class="${mode === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <label class="rk-pick" title="이 대리점에게 보이는 화면으로 미리보기">👁 <select data-rkag>${opts.map((a) => `<option value="${esc(a.code)}" ${a.code === st.rkAg ? 'selected' : ''}>${esc(a.code)} ${esc(a.name)}${found(a.code) < 0 ? ' (자료 없음)' : ''}</option>`).join('')}</select></label></div>
+    ${me ? `<div class="rk-me"><div class="rk-big">${me.rank}<small>위</small></div><div><div class="rk-who">${esc(ag?.name || me.n)}</div>
+      <div class="rk-sub">${mode === 'm' ? '이번 달' : '누적'} <b>${me.v.toLocaleString()}대</b> · 상위 ${top}% · 전체 ${n.toLocaleString()}곳</div>
+      <div class="rk-sub2">${mode === 'm' ? `누적 ${me.t.toLocaleString()}대` : `이번 달 +${me.m.toLocaleString()}대`} · 어제 +${me.d.toLocaleString()}대</div></div></div>`
+      : `<p class="rk-empty">설치 현황에서 '${esc(ag?.name || '')}'을(를) 찾지 못했습니다. 대리점명이 다르게 적혀 있을 수 있습니다.</p>`}
+    <ol class="rk-list">${html}</ol>
+    <div class="rk-foot"><span>🔒 다른 대리점명·수량은 가려짐 · 지금은 총관리자만 보임</span><button type="button" class="link" data-rkpaste>갱신</button></div></div>`;
+}
+function bindRank(root) {
+  const box = root.querySelector('#rkBox'); if (!box) return;
+  const redraw = () => { box.innerHTML = rankCard(rankSnap); bindRank(root); };
+  box.querySelectorAll('[data-rk]').forEach((b) => b.onclick = () => { st.rkMode = b.dataset.rk; redraw(); });
+  const sel = box.querySelector('[data-rkag]'); if (sel) sel.onchange = () => { st.rkAg = sel.value; redraw(); };
+  box.querySelectorAll('[data-rkpaste]').forEach((b) => b.onclick = () => modal('🏆 커넥트 설치 현황 갱신',
+    `<p class="hint">매일 받는 <b>[KICC] 밴대리점 설치현황</b> 메일 내용을 처음부터 끝까지 복사해 그대로 붙여넣으세요. '누적설치 전체' 표를 읽어 기준일별로 저장합니다(같은 날짜는 덮어씀).</p>
+     <label class="field"><textarea name="raw" rows="10" required placeholder="[KICC] 밴대리점 설치현황 2026-11-27 …"></textarea></label>`,
+    async (v) => {
+      const p = rkParse(v.raw);
+      const { error } = await sb.from('connect_ranks').upsert(p, { onConflict: 'base_date' });
+      if (error) throw error;
+      rankSnap = (await sb.from('connect_ranks').select('*').order('base_date', { ascending: false }).limit(1).maybeSingle()).data;
+      toast(`${p.base_date} 기준 ${p.rows.length}개 대리점 저장됨`); redraw();
+    }, '저장', true));
+}
+
 async function viewHome(main, { pendingCnt }) {
   const admin = isAdmin();
   const [pins, recent, pages, cats, mine] = await Promise.all([
@@ -1574,6 +1654,11 @@ async function viewHome(main, { pendingCnt }) {
       <button class="h-stat" data-go="inbox"><b>${waiting}</b><span>답변 필요 문의</span></button>
       <button class="h-stat" data-go="users"><b>${pendingCnt}</b><span>가입 승인 대기</span></button>
       <button class="h-stat" data-go="${isSuper() ? 'agencies' : 'board'}"><b>${agencies.length}</b><span>${isSuper() ? '등록 대리점' : '담당 대리점'}</span></button></div>`;
+    if (isSuper()) {   // 네이버 커넥트 설치 순위 — 민감 자료라 지금은 총관리자만
+      const { data: rk, error: rke } = await sb.from('connect_ranks').select('base_date,rows,total,uploaded_by,uploaded_at').order('base_date', { ascending: false }).limit(1).maybeSingle();
+      if (!rke) side += `<div id="rkBox">${rankCard(rk)}</div>`;
+      rankSnap = rk || null;
+    }
   } else {
     const reads = await readMap(mine.data.map((p) => p.id));
     const unread = mine.data.filter((p) => !reads.mine[p.id] || new Date(reads.mine[p.id]) < new Date(p.last_activity));
@@ -1626,6 +1711,7 @@ async function viewHome(main, { pendingCnt }) {
       <div class="h-cats">${tops.map((c, i) => `<button class="h-cat" data-cat="${c.id}">${numBadge(i + 1)}${esc(c.name)}</button>`).join('')}</div></section>`}`;
 
   const go = (patch) => { resetView(); Object.assign(st, { q: '', filter: 'all', libCat: null, libPage: null, libQ: '' }, patch); window.scrollTo(0, 0); render(); };
+  bindRank(main);
   main.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => go({ tab: b.dataset.go }));
   main.querySelectorAll('[data-notice]').forEach((b) => b.onclick = () => go({ tab: 'notices', noticeId: Number(b.dataset.notice) }));
   main.querySelectorAll('[data-faq]').forEach((b) => b.onclick = () => go({ tab: 'faq', faqOpen: Number(b.dataset.faq) }));
@@ -1977,7 +2063,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=3c3716f'), import('./docfill.js?v=3c3716f'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=1e4a50a'), import('./docfill.js?v=1e4a50a'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2128,7 +2214,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=3c3716f')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=1e4a50a')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2768,7 +2854,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=3c3716f');
+  const V = await import('./viewer.js?v=1e4a50a');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -2910,7 +2996,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=3c3716f');
+    const V = await import('./viewer.js?v=1e4a50a');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
