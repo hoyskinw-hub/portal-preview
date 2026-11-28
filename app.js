@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { marked } from 'https://esm.sh/marked@12.0.2';
 import DOMPurify from 'https://esm.sh/dompurify@3.1.6';
-import { renderWorkbook, renderPdfThumb } from './viewer.js?v=86d1144';
+import { renderWorkbook, renderPdfThumb } from './viewer.js?v=3381d80';
 
 const cfg = window.PORTAL_CONFIG || {};
 
@@ -1662,12 +1662,14 @@ function rankCard(snap) {
     const codeOf = new Map(agencies.map((a) => [rkNorm(a.name), a.code]));
     const ours = list.filter((r) => codeOf.has(rkNorm(r.n)));
     const q = rkNorm(st.rkQ || '');
-    const rowsHq = (q ? list.filter((r) => rkNorm(r.n).includes(q)) : st.rkAll ? list : list.slice(0, 6)).map((r) => { const c = codeOf.get(rkNorm(r.n));
+    const qc = String(st.rkQ || '').trim().toLowerCase();
+    const hit = (r) => rkNorm(r.n).includes(q) || String(codeOf.get(rkNorm(r.n)) || '').toLowerCase().includes(qc);
+    const rowsHq = (q ? list.filter(hit) : st.rkAll ? list : list.slice(0, 6)).map((r) => { const c = codeOf.get(rkNorm(r.n));
       return `<li class="${c ? 'ours' : ''}"><span class="rk-r">${medal(r.rank)}</span><span class="rk-nm">${esc(r.n)}</span>${c ? `<em class="rk-code">${esc(c)}</em>` : ''}<b>${r.v.toLocaleString()}</b></li>`; }).join('');
     return `<div class="card rk">
       <div class="rk-head"><h3>🏆 네이버 커넥트 설치 순위</h3><span class="rk-date">${esc(d)} 기준 · ${n.toLocaleString()}곳</span></div>
       <div class="rk-ctl">${modeSeg}${viewSeg}</div>
-      <input type="search" class="rk-q" placeholder="🔍 대리점명 찾기" value="${esc(st.rkQ || '')}">
+      <input type="search" class="rk-q" placeholder="🔍 대리점명·코드 찾기" value="${esc(st.rkQ || '')}">
       <p class="rk-ours">우리 포털 대리점 <b>${ours.length}곳</b>${ours[0] ? ` · 최고 <b>${ours[0].rank}위</b> ${esc(ours[0].n)}` : ''} <span class="muted">(코드 표시)</span></p>
       <ol class="rk-list hq${st.rkAll || q ? ' all' : ''}">${rowsHq || '<li class="rk-gap">찾는 대리점이 없습니다</li>'}</ol>
       <div class="rk-foot"><button type="button" class="link" data-rkall>${st.rkAll ? '접기' : `전체 ${n.toLocaleString()}곳 보기`}</button><span>🔒 총관리자만 보임</span><button type="button" class="link" data-rkpaste>갱신</button></div></div>`;
@@ -2148,7 +2150,7 @@ let pdfLibs = null;
 async function pdfKit() {
   if (!pdfLibs) {
     const [pl, fk, pf, df, font] = await Promise.all([import('https://esm.sh/pdf-lib@1.17.1'), import('https://esm.sh/@pdf-lib/fontkit@1.1.1'),
-      import('./pdffill.js?v=86d1144'), import('./docfill.js?v=86d1144'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
+      import('./pdffill.js?v=3381d80'), import('./docfill.js?v=3381d80'), fetch('fonts/kr.ttf').then((r) => r.arrayBuffer())]);
     pdfLibs = { lib: { PDFDocument: pl.PDFDocument, rgb: pl.rgb, fontkit: fk.default }, ...pf, docData: df.docData, font };
   }
   return pdfLibs;
@@ -2299,7 +2301,7 @@ function guideThenDownload(info, app, which) {
   const root = document.querySelector('#ag');
   (async () => {
     try {
-      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=86d1144')]);
+      const [S, bytes, V] = await Promise.all([guideSlides(info, app), buildPdfBytes('all', info, app), import('./viewer.js?v=3381d80')]);
       const doc = await V.loadPdfBytes(bytes);
       const seal = info.corp_type === '법인' ? '법인인감' : '대표자 인감';
       root.innerHTML = `<div class="ag-key"><span><b>${seal}</b> 인감증명서와 같은 도장</span><span><b>계인</b> 2부 첫 장을 맞댄 경계에 반씩</span><span><b>간인</b> 쪽과 쪽 경계에 반씩</span></div>
@@ -2939,7 +2941,7 @@ function ctFindSignSpots(pages, agName) {
 
 // PDF 쪽들을 그리고(날인 위치 표시) 클릭 처리
 async function ctRenderPages(box, bytes, marks, { onPageClick, onMarkClick, sealUrl } = {}) {
-  const V = await import('./viewer.js?v=86d1144');
+  const V = await import('./viewer.js?v=3381d80');
   const doc = await V.loadPdfBytes(bytes.slice());
   box.innerHTML = '';
   const width = Math.min(760, box.clientWidth || 760);
@@ -3081,7 +3083,7 @@ async function ctEditView(main) {
   };
   const findSign = async (auto) => {
     if (!bytes) return toast('계약서 PDF를 먼저 선택하세요.', true);
-    const V = await import('./viewer.js?v=86d1144');
+    const V = await import('./viewer.js?v=3381d80');
     const code = c?.agency_code || f.querySelector('[name=agency_code]')?.value;
     const r = ctFindSignSpots(await V.pdfTextItems(await V.loadPdfBytes(bytes.slice())), code ? agencyName(code) : '');
     if (!r.mine.length) return toast(auto ? '서명란 “(인)”을 자동으로 찾지 못했습니다. 문서에서 도장 자리를 직접 눌러 주세요.' : '서명란 “(인)”을 찾지 못했습니다. 문서에서 직접 눌러 지정해 주세요.', true);
